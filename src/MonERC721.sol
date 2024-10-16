@@ -238,4 +238,3 @@ contract MonERC721 is ERC721, Ownable2Step, IMonERC721 {
         return baseUri;
     }
 }
-

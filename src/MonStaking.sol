@@ -52,6 +52,7 @@ contract MonStaking is OApp, IERC721Receiver {
     error MonStaking__ChainNotSupported();
     error MonStaking__UserAlreadyPremium();
     error MonStaking__UserNotPremium();
+    error MonStaking__NotEnoughNativeTokens();
 
     event TokenBaseMultiplierChanged(uint256 indexed _newValue);
     event TokenPremiumMultiplierChanged(uint256 indexed _newValue);
@@ -174,10 +175,12 @@ contract MonStaking is OApp, IERC721Receiver {
 
         bytes memory message = abi.encode(msg.sender, true);
 
-        bool payInLzToken = msg.value > 0;
+        bool payInLzToken = msg.value == 0;
 
         MessagingFee memory _fee = _quote(_chainId, message, "", payInLzToken);
 
+        // Check for Lztokens is not needed because the transferFrom() will revert
+        if(!payInLzToken && msg.value < _fee.lzTokenFee) revert MonStaking__NotEnoughNativeTokens();
 
         _lzSend(_chainId, message, "", _fee, msg.sender);
 

@@ -98,7 +98,7 @@ contract MonStaking is OApp, IERC721Receiver {
     }
 
     modifier ifTimelockAllows() {
-        if (s_userUnstakeRequest.requestTimestamp + TIME_LOCK_DURATION > block.timestamp) {
+        if (s_userUnstakeRequest[msg.sender].requestTimestamp + TIME_LOCK_DURATION > block.timestamp) {
             revert MonStaking__TimelockNotPassed();
         }
         _;

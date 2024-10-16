@@ -155,6 +155,8 @@ contract MonStaking is OApp, IERC721Receiver {
 
     function requireUnstakeAll() external payable {}
 
+    function climUnstakedAssets() external {}
+
     function updateStakingBalance(address _from, address _to, uint256 _amount) external payable onlyLSMContract {}
 
     // made if we are premium here and we want to signal it to a newly deployed contract on other chain

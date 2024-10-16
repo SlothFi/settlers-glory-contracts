@@ -13,6 +13,10 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IMonERC721} from "./interfaces/IMonERC721.sol";
 import {IDelegateRegistry} from "./interfaces/IDelegateRegistry.sol";
 
+// TODO - Implement bitmap for checking if user is premium on other chains 
+// TODO - Create LSToken in the constructor so we'll have its address here and it will have this address there
+
+
 contract MonStaking is OApp, IERC721Receiver {
     using SafeERC20 for IERC20;
 

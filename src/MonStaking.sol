@@ -44,11 +44,15 @@ contract MonStaking is OApp, IERC721Receiver {
     error MonStaking__InvalidMultiplierType();
     error MonStaking__InvalidTokenDecimals();
     error MonStaking__NotLSMContract();
+    error MonStaking__ChainNotSupported();
+    error MonStaking__UserAlreadyPremium();
+    error MonStaking__UserNotPremium();
 
     event TokenBaseMultiplierChanged(uint256 indexed _newValue);
     event TokenPremiumMultiplierChanged(uint256 indexed _newValue);
     event NftBaseMultiplierChanged(uint256 indexed _newValue);
     event NftPremiumMultiplierChanged(uint256 indexed _newValue);
+    event NewChainPinged(uint32 indexed _chainId, address indexed _user);
 
     uint256 public constant BPS = 10_000;
     uint256 public constant POINTS_DECIMALS = 1e6;
@@ -60,6 +64,7 @@ contract MonStaking is OApp, IERC721Receiver {
     uint256 public immutable i_endPremiumTimestamp;
     address public immutable i_monsterToken;
     uint256 public immutable i_monsterTokenDecimals;
+    address public immutable i_layerZeroToken;
     address public immutable i_lsToken;
     uint256 public immutable i_lsTokenDecimals;
     address public immutable i_nftToken;
@@ -99,6 +104,7 @@ contract MonStaking is OApp, IERC721Receiver {
         address _monsterToken,
         address _lsToken,
         address _nftToken,
+        address _layerZeroToken,
         uint256 _tokenBaseMultiplier,
         uint256 _tokenPremiumMultiplier,
         uint256 _nftBaseMultiplier,
@@ -107,7 +113,7 @@ contract MonStaking is OApp, IERC721Receiver {
     ) OApp(_endpoint, _delegated) Ownable(_delegated) {
         if (
             _monsterToken == address(0) || _lsToken == address(0) || _nftToken == address(0)
-                || _delegateRegistry == address(0)
+                || _delegateRegistry == address(0) || _layerZeroToken == address(0)
         ) revert MonStaking__ZeroAddress();
         if (_premiumDuration == 0) revert MonStaking__ZeroAmount();
         if (_tokenBaseMultiplier == 0 || _tokenBaseMultiplier >= _tokenPremiumMultiplier) {
@@ -131,6 +137,7 @@ contract MonStaking is OApp, IERC721Receiver {
         i_nftToken = _nftToken;
         i_nftMaxSupply = IMonERC721(_nftToken).maxSupply();
         i_delegateRegistry = IDelegateRegistry(_delegateRegistry);
+        i_layerZeroToken = _layerZeroToken;
 
         s_tokenBaseMultiplier = _tokenBaseMultiplier;
         s_tokenPremiumMultiplier = _tokenPremiumMultiplier;
@@ -150,7 +157,24 @@ contract MonStaking is OApp, IERC721Receiver {
 
     function updateStakingBalance(address _from, address _to, uint256 _amount) external payable onlyLSMContract {}
 
-    function pingNewChainContract(uint32 _chainId) external payable {} // made if we are premium here and we want to signal it to a newly deployed contract on other chain
+    // made if we are premium here and we want to signal it to a newly deployed contract on other chain
+    function pingNewChainContract(uint32 _chainId) external payable {
+        if (_chainId == 0) revert MonStaking__ZeroChainId();
+        if (s_otherChainStakingContract[_chainId] == bytes32(0)) revert MonStaking__ChainNotSupported();
+        if (s_isUserPremium[_chainId][msg.sender]) revert MonStaking__UserAlreadyPremium();
+        if (!_isUserPremium(s_userTimeInfo[msg.sender].startingTimestamp)) revert MonStaking__UserNotPremium();
+
+        bytes memory message = abi.encode(msg.sender, true);
+
+        bool payInLzToken = msg.value > 0;
+
+        MessagingFee memory _fee = _quote(_chainId, message, "", payInLzToken);
+
+
+        _lzSend(_chainId, message, "", _fee, msg.sender);
+
+        emit NewChainPinged(_chainId, msg.sender);
+    }
 
     function syncPoints() external {}
 

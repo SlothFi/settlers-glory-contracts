@@ -12,4 +12,14 @@ contract MonStaking is OApp {
 
     }
 
+    function _lzReceive(
+        Origin calldata _origin,
+        bytes32 _guid,
+        bytes calldata _message,
+        address _executor,
+        bytes calldata _extraData
+    ) internal override {
+
+    }
+
 }

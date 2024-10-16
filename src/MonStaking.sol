@@ -31,6 +31,7 @@ contract MonStaking is OApp, IERC721Receiver {
     struct UserUnstakeRequest {
         uint256 tokenAmount;
         uint256 nftAmount;
+        uint256 requestTimestamp;
     }
 
     error MonStaking__ZeroAddress();
@@ -84,6 +85,7 @@ contract MonStaking is OApp, IERC721Receiver {
     mapping(uint32 chainId => bytes32 otherChainStaking) public s_otherChainStakingContract;
     uint32[MAX_SUPPOERTED_CHAINS] public s_supportedChains; // this is made for saving gas
     mapping(uint32 chainId => mapping(address user => bool isPremium)) public s_isUserPremium;
+    mapping(address user => UserUnstakeRequest unstakeRequest) public s_userUnstakeRequest;
 
     modifier onlyLSMContract() {
         if (msg.sender != i_lsToken) revert MonStaking__NotLSMContract();
@@ -91,7 +93,7 @@ contract MonStaking is OApp, IERC721Receiver {
     }
 
     modifier ifTimelockAllows() {
-        if (s_userTimeInfo[msg.sender].startingTimestamp + TIME_LOCK_DURATION > block.timestamp) {
+        if (s_userUnstakeRequest.requestTimestamp + TIME_LOCK_DURATION > block.timestamp) {
             revert MonStaking__TimelockNotPassed();
         }
         _;
@@ -155,7 +157,7 @@ contract MonStaking is OApp, IERC721Receiver {
 
     function requireUnstakeAll() external payable {}
 
-    function climUnstakedAssets() external {}
+    function climUnstakedAssets() external ifTimelockAllows {}
 
     function updateStakingBalance(address _from, address _to, uint256 _amount) external payable onlyLSMContract {}
 

@@ -5,6 +5,7 @@ pragma solidity 0.8.24;
 import {OApp, Origin, MessagingFee} from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721Metadata} from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -36,6 +37,7 @@ contract MonStaking is OApp {
     error MonStaking__InvalidNftPremiumMultiplier();
     error MonStaking__InvalidMultiplierType();
     error MonStaking__InvalidTokenDecimals();
+    error MonStaking__NotLSMContract();
 
     event TokenBaseMultiplierChanged(uint256 indexed _newValue);
     event TokenPremiumMultiplierChanged(uint256 indexed _newValue);
@@ -70,6 +72,11 @@ contract MonStaking is OApp {
     mapping(uint32 chainId => bytes32 otherChainStaking) public s_otherChainStakingContract;
     uint32[MAX_SUPPOERTED_CHAINS] public s_supportedChains; // this is made for saving gas
     mapping(uint32 chainId => mapping(address user => bool isPremium)) public s_isUserPremium;
+
+    modifier onlyLSMContract() {
+        if (msg.sender != i_lsToken) revert MonStaking__NotLSMContract();
+        _;
+    }
 
     modifier ifTimelockAllows() {
         if (s_userTimeInfo[msg.sender].startingTimestamp + TIME_LOCK_DURATION > block.timestamp) {
@@ -131,6 +138,8 @@ contract MonStaking is OApp {
     function unstakeTokens(uint256 _amount) external payable ifTimelockAllows {}
 
     function unstakeNft(uint256 _tokenId) external payable ifTimelockAllows {}
+
+    function updateStakingBalance(address _from, address _to, uint256 _amount) external payable onlyLSMContract {}
 
     function pingNewChainContract(uint32 _chainId) external payable {} // made if we are premium here and we want to signal it to a newly deployed contract on other chain
 

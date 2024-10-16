@@ -7,12 +7,13 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721Metadata} from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
+import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IMonERC721} from "./interfaces/IMonERC721.sol";
 import {IDelegateRegistry} from "./interfaces/IDelegateRegistry.sol";
 
-contract MonStaking is OApp {
+contract MonStaking is OApp, IERC721Receiver {
     using SafeERC20 for IERC20;
 
     enum Multipliers {
@@ -25,6 +26,11 @@ contract MonStaking is OApp {
     struct TimeInfo {
         uint256 lastUpdatedTimestamp;
         uint256 startingTimestamp;
+    }
+
+    struct UserUnstakeRequest {
+        uint256 tokenAmount;
+        uint256 nftAmount;
     }
 
     error MonStaking__ZeroAddress();
@@ -45,7 +51,7 @@ contract MonStaking is OApp {
     event NftPremiumMultiplierChanged(uint256 indexed _newValue);
 
     uint256 public constant BPS = 10_000;
-    uint256 public constant POINTS_DECIMALS = 1e18;
+    uint256 public constant POINTS_DECIMALS = 1e6;
     uint256 public constant MAX_SUPPOERTED_CHAINS = 10;
     uint256 public constant TIME_LOCK_DURATION = 3 hours;
 
@@ -68,6 +74,7 @@ contract MonStaking is OApp {
     mapping(address user => TimeInfo timeInfo) public s_userTimeInfo;
     mapping(address user => uint256 nftAmount) public s_userNftAmount;
     mapping(uint256 tokenId => address owner) public s_nftOwner;
+    mapping(address user => uint256 points) public s_userPoints;
     mapping(address user => uint256 stakedTokenAmount) public s_userStakedTokenAmount;
     mapping(uint32 chainId => bytes32 otherChainStaking) public s_otherChainStakingContract;
     uint32[MAX_SUPPOERTED_CHAINS] public s_supportedChains; // this is made for saving gas
@@ -135,9 +142,11 @@ contract MonStaking is OApp {
 
     function stakeNft(uint256 _tokenId) external payable {}
 
-    function unstakeTokens(uint256 _amount) external payable ifTimelockAllows {}
+    function unstakeTokens(uint256 _amount) external payable {}
 
-    function unstakeNft(uint256 _tokenId) external payable ifTimelockAllows {}
+    function unstakeNft(uint256 _tokenId) external payable {}
+
+    function requireUnstakeAll() external payable {}
 
     function updateStakingBalance(address _from, address _to, uint256 _amount) external payable onlyLSMContract {}
 
@@ -145,7 +154,7 @@ contract MonStaking is OApp {
 
     function syncPoints() external {}
 
-    function setMultipliers(Multipliers _multiplierType, uint256 _value) external onlyOwner {
+    function setMultiplier(Multipliers _multiplierType, uint256 _value) external onlyOwner {
         if (_value == 0) revert MonStaking__ZeroAmount();
 
         if (_multiplierType == Multipliers.TOKEN_BASE) {
@@ -173,17 +182,87 @@ contract MonStaking is OApp {
         }
     }
 
-    function _updateUserState(address _user) internal {}
+    function onERC721Received(address, /*_operator*/ address, /*_from*/ uint256, /*_tokenId*/ bytes calldata /*_data*/ )
+        external
+        pure
+        override
+        returns (bytes4)
+    {
+        return this.onERC721Received.selector;
+    }
 
-    function _updateUserPoints() internal {}
+    function _updateUserState(address _user) internal {
+        uint256 userTokenBalance = s_userStakedTokenAmount[_user];
+        uint256 userNftBalance = s_userNftAmount[_user];
+        TimeInfo memory userTimeInfo = s_userTimeInfo[_user];
 
-    function _updateUserTimeInfo() internal {}
+        _updateUserPoints(userTokenBalance, userNftBalance, userTimeInfo, _user);
+        _updateUserTimeInfo();
+    }
 
-    function _calculateTokenPoints() internal pure returns (uint256) {}
+    function _updateUserPoints(
+        uint256 _userTokenBalance,
+        uint256 _userNftBalance,
+        TimeInfo memory _userTimeInfo,
+        address _user
+    ) internal {
+        uint256 currentTimestamp = block.timestamp;
+        // Gas efficient because if first case evaluates to true, the second one is not checked - maybe a better way to do this
+        bool isPremium = _isUserPremium(_userTimeInfo.startingTimestamp) || _isUserPremiumOnOtherChains(_user);
+        uint256 tokenPoints = _calculateTokenPoints(_userTokenBalance, _userTimeInfo.lastUpdatedTimestamp, currentTimestamp, isPremium);
+        uint256 nftPoints = _calculateNftPoints(_userNftBalance, _userTimeInfo.lastUpdatedTimestamp, currentTimestamp, isPremium);
+        s_userPoints[_user] += tokenPoints + nftPoints;
+    }
 
-    function _calculateNftPoints() internal pure returns (uint256) {}
+    function _updateUserTimeInfo() internal {
+        s_userTimeInfo[msg.sender].lastUpdatedTimestamp = block.timestamp;
+        if(s_userTimeInfo[msg.sender].startingTimestamp == 0) {
+            s_userTimeInfo[msg.sender].startingTimestamp = block.timestamp;
+        }
+    }
 
-    function _isUserPremium() internal view returns (bool) {}
+    function _clearUserTimeInfo(address _user) internal {
+        delete s_userTimeInfo[_user];
+    }
+
+    function _calculateTokenPoints(
+        uint256 _tokenAmount,
+        uint256 _lastTimestamp,
+        uint256 _currentTimestamp,
+        bool _isPremium
+    ) internal view returns (uint256) {
+        uint256 multiplier = _isPremium ? s_tokenPremiumMultiplier : s_tokenBaseMultiplier;
+        uint256 timeDiff = _currentTimestamp - _lastTimestamp;
+        uint256 points = _tokenAmount * multiplier * timeDiff;
+        return _enforcePointDecimals(points) / i_monsterTokenDecimals / BPS;
+    }
+
+    function _calculateNftPoints(uint256 _nftAmount, uint256 _lastTimestamp, uint256 _currentTimestamp, bool _isPremium)
+        internal
+        view
+        returns (uint256)
+    {
+        uint256 multiplier = _isPremium ? s_nftPremiumMultiplier : s_nftBaseMultiplier;
+        uint256 timeDiff = _currentTimestamp - _lastTimestamp;
+        uint256 points = _nftAmount * multiplier * timeDiff;
+        return _enforcePointDecimals(points) / BPS;
+    }
+
+    function _enforcePointDecimals(uint256 _points) internal pure returns (uint256) {
+        return _points * POINTS_DECIMALS;
+    }
+
+    function _isUserPremium(uint256 _startTimestamp) internal view returns (bool) {
+        return _startTimestamp <= i_endPremiumTimestamp && _startTimestamp >= i_crationTimestamp;
+    }
+
+    function _isUserPremiumOnOtherChains(address _user) internal view returns (bool) {
+        for (uint256 i = 0; i < MAX_SUPPOERTED_CHAINS; i++) {
+            uint32 chainId = s_supportedChains[i];
+            if(s_isUserPremium[chainId][_user]) return true;
+        }
+        return false;
+    }
 
     function _lzReceive(
         Origin calldata _origin,

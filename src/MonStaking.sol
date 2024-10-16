@@ -180,7 +180,7 @@ contract MonStaking is OApp, IERC721Receiver {
         MessagingFee memory _fee = _quote(_chainId, message, "", payInLzToken);
 
         // Check for Lztokens is not needed because the transferFrom() will revert
-        if(!payInLzToken && msg.value < _fee.lzTokenFee) revert MonStaking__NotEnoughNativeTokens();
+        if(!payInLzToken && msg.value < _fee.nativeFee) revert MonStaking__NotEnoughNativeTokens();
 
         _lzSend(_chainId, message, "", _fee, msg.sender);
 

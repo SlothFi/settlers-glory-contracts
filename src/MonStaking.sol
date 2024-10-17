@@ -12,6 +12,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IMonERC721} from "./interfaces/IMonERC721.sol";
 import {IDelegateRegistry} from "./interfaces/IDelegateRegistry.sol";
+import {LiquidStakedMonster} from "./LiquidStakedMonster.sol";
 
 // TODO - Implement bitmap for checking if user is premium on other chains 
 // TODO - Create LSToken in the constructor so we'll have its address here and it will have this address there
@@ -59,6 +60,7 @@ contract MonStaking is OApp, IERC721Receiver {
     event NftBaseMultiplierChanged(uint256 indexed _newValue);
     event NftPremiumMultiplierChanged(uint256 indexed _newValue);
     event NewChainPinged(uint32 indexed _chainId, address indexed _user);
+    event StakingBalanceUpdated(address indexed _from, address indexed _to, uint256 indexed _amount);
 
     uint256 public constant BPS = 10_000;
     uint256 public constant POINTS_DECIMALS = 1e6;
@@ -116,10 +118,13 @@ contract MonStaking is OApp, IERC721Receiver {
         uint256 _tokenPremiumMultiplier,
         uint256 _nftBaseMultiplier,
         uint256 _nftPremiumMultiplier,
-        address _delegateRegistry
+        address _delegateRegistry,
+        address _marketPlace,
+        address _operatorRole,
+        address _defaultAdmin
     ) OApp(_endpoint, _delegated) Ownable(_delegated) {
         if (
-            _monsterToken == address(0) || _lsToken == address(0) || _nftToken == address(0)
+            _monsterToken == address(0) ||  _nftToken == address(0)
                 || _delegateRegistry == address(0) || _layerZeroToken == address(0)
         ) revert MonStaking__ZeroAddress();
         if (_premiumDuration == 0) revert MonStaking__ZeroAmount();
@@ -138,8 +143,6 @@ contract MonStaking is OApp, IERC721Receiver {
         i_monsterToken = _monsterToken;
         i_monsterTokenDecimals = IERC20Metadata(_monsterToken).decimals();
         if (i_monsterTokenDecimals == 0) revert MonStaking__InvalidTokenDecimals();
-        i_lsToken = _lsToken;
-        i_monsterTokenDecimals = IERC20Metadata(_monsterToken).decimals();
         if (i_lsTokenDecimals == 0) revert MonStaking__InvalidTokenDecimals();
         i_nftToken = _nftToken;
         i_nftMaxSupply = IMonERC721(_nftToken).maxSupply();
@@ -150,6 +153,10 @@ contract MonStaking is OApp, IERC721Receiver {
         s_tokenPremiumMultiplier = _tokenPremiumMultiplier;
         s_nftBaseMultiplier = _nftBaseMultiplier;
         s_nftPremiumMultiplier = _nftPremiumMultiplier;
+
+        i_lsToken = address(new LiquidStakedMonster(_operatorRole, _defaultAdmin, _marketPlace));
+        i_lsTokenDecimals = IERC20Metadata(i_lsToken).decimals();
+        if (i_lsTokenDecimals == 0) revert MonStaking__InvalidTokenDecimals();
     }
 
     function stakeTokens(uint256 _amount) external payable {}
@@ -164,7 +171,31 @@ contract MonStaking is OApp, IERC721Receiver {
 
     function climUnstakedAssets() external ifTimelockAllows {}
 
-    function updateStakingBalance(address _from, address _to, uint256 _amount) external payable onlyLSMContract {}
+    function updateStakingBalance(address _from, address _to, uint256 _amount) external payable onlyLSMContract {
+
+        if (_from == address(0) || _to == address(0)) revert MonStaking__ZeroAddress();
+        if (_amount == 0) revert MonStaking__ZeroAmount();
+
+        _updateUserState(_from);
+        _updateUserState(_to);
+
+        s_userStakedTokenAmount[_from] -= _amount;
+        s_userStakedTokenAmount[_to] += _amount;
+
+        uint256 fromTokenBalance = s_userStakedTokenAmount[_from];
+
+        if (fromTokenBalance == 0) {
+            _clearUserTimeInfo(_from);
+
+            if(s_userNftAmount[_from] == 0 && _isUserPremium(s_userTimeInfo[_from].startingTimestamp)) {
+
+                _updateOtherChains(_from, false);
+            }
+
+        }
+
+        emit StakingBalanceUpdated(_from, _to, _amount);
+    }
 
     // made if we are premium here and we want to signal it to a newly deployed contract on other chain
     function pingNewChainContract(uint32 _chainId) external payable {
@@ -297,6 +328,10 @@ contract MonStaking is OApp, IERC721Receiver {
             if(s_isUserPremium[chainId][_user]) return true;
         }
         return false;
+    }
+
+    function _updateOtherChains(address _user, bool _isPremium) internal {
+
     }
 
     function _lzReceive(

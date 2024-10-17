@@ -72,7 +72,6 @@ contract MonStaking is OApp, IERC721Receiver {
     uint256 public immutable i_endPremiumTimestamp;
     address public immutable i_monsterToken;
     uint256 public immutable i_monsterTokenDecimals;
-    address public immutable i_layerZeroToken;
     address public immutable i_lsToken;
     uint256 public immutable i_lsTokenDecimals;
     address public immutable i_nftToken;
@@ -111,9 +110,7 @@ contract MonStaking is OApp, IERC721Receiver {
         address _delegated,
         uint256 _premiumDuration,
         address _monsterToken,
-        address _lsToken,
         address _nftToken,
-        address _layerZeroToken,
         uint256 _tokenBaseMultiplier,
         uint256 _tokenPremiumMultiplier,
         uint256 _nftBaseMultiplier,
@@ -125,7 +122,7 @@ contract MonStaking is OApp, IERC721Receiver {
     ) OApp(_endpoint, _delegated) Ownable(_delegated) {
         if (
             _monsterToken == address(0) ||  _nftToken == address(0)
-                || _delegateRegistry == address(0) || _layerZeroToken == address(0)
+                || _delegateRegistry == address(0)
         ) revert MonStaking__ZeroAddress();
         if (_premiumDuration == 0) revert MonStaking__ZeroAmount();
         if (_tokenBaseMultiplier == 0 || _tokenBaseMultiplier >= _tokenPremiumMultiplier) {
@@ -147,7 +144,6 @@ contract MonStaking is OApp, IERC721Receiver {
         i_nftToken = _nftToken;
         i_nftMaxSupply = IMonERC721(_nftToken).maxSupply();
         i_delegateRegistry = IDelegateRegistry(_delegateRegistry);
-        i_layerZeroToken = _layerZeroToken;
 
         s_tokenBaseMultiplier = _tokenBaseMultiplier;
         s_tokenPremiumMultiplier = _tokenPremiumMultiplier;
@@ -155,8 +151,6 @@ contract MonStaking is OApp, IERC721Receiver {
         s_nftPremiumMultiplier = _nftPremiumMultiplier;
 
         i_lsToken = address(new LiquidStakedMonster(_operatorRole, _defaultAdmin, _marketPlace));
-        i_lsTokenDecimals = IERC20Metadata(i_lsToken).decimals();
-        if (i_lsTokenDecimals == 0) revert MonStaking__InvalidTokenDecimals();
     }
 
     function stakeTokens(uint256 _amount) external payable {}
@@ -183,11 +177,13 @@ contract MonStaking is OApp, IERC721Receiver {
         s_userStakedTokenAmount[_to] += _amount;
 
         uint256 fromTokenBalance = s_userStakedTokenAmount[_from];
+        uint256 fromNftBalance = s_userNftAmount[_from];
+        bool isFromPremium = _isUserPremium(s_userTimeInfo[_from].startingTimestamp);
 
-        if (fromTokenBalance == 0) {
+        if (fromTokenBalance == 0 && fromNftBalance == 0) {
             _clearUserTimeInfo(_from);
 
-            if(s_userNftAmount[_from] == 0 && _isUserPremium(s_userTimeInfo[_from].startingTimestamp)) {
+            if(isFromPremium) {
 
                 _updateOtherChains(_from, false);
             }

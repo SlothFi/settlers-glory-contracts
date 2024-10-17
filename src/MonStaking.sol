@@ -250,6 +250,7 @@ contract MonStaking is OApp, IERC721Receiver {
         s_userStakedTokenAmount[_from] -= _amount;
         s_userStakedTokenAmount[_to] += _amount;
 
+        // TODO - remove variables
         uint256 fromTokenBalance = s_userStakedTokenAmount[_from];
         uint256 fromNftBalance = s_userNftAmount[_from];
         bool isFromPremium = _isUserPremium(s_userTimeInfo[_from].startingTimestamp);

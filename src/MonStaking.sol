@@ -49,11 +49,14 @@ contract MonStaking is OApp, IERC721Receiver {
     error MonStaking__InvalidNftPremiumMultiplier();
     error MonStaking__InvalidMultiplierType();
     error MonStaking__InvalidTokenDecimals();
+    error MonStaking__InvalidTokenId();
     error MonStaking__NotLSMContract();
     error MonStaking__ChainNotSupported();
     error MonStaking__UserAlreadyPremium();
     error MonStaking__UserNotPremium();
     error MonStaking__NotEnoughNativeTokens();
+    error MonStaking__NotEnoughMonsterTokens();
+    error MonStaking__CannotTotallyUnstake();
 
     event TokenBaseMultiplierChanged(uint256 indexed _newValue);
     event TokenPremiumMultiplierChanged(uint256 indexed _newValue);
@@ -61,6 +64,11 @@ contract MonStaking is OApp, IERC721Receiver {
     event NftPremiumMultiplierChanged(uint256 indexed _newValue);
     event NewChainPinged(uint32 indexed _chainId, address indexed _user);
     event StakingBalanceUpdated(address indexed _from, address indexed _to, uint256 indexed _amount);
+    event TokensStaked(address indexed _user, uint256 indexed _amount);
+    event TokensUnstaked(address indexed _user, uint256 indexed _amount);
+    event NftStaked(address indexed _user, uint256 indexed _tokenId);
+    event ChainsUpdated(uint32[] indexed _chainIds, address indexed _user, bool indexed _isPremium);
+    event PointsSynced(address indexed _user, uint256 indexed _totalPoints);
 
     uint256 public constant BPS = 10_000;
     uint256 public constant POINTS_DECIMALS = 1e6;
@@ -153,17 +161,83 @@ contract MonStaking is OApp, IERC721Receiver {
         i_lsToken = address(new LiquidStakedMonster(_operatorRole, _defaultAdmin, _marketPlace));
     }
 
-    function stakeTokens(uint256 _amount) external payable {}
+    function stakeTokens(uint256 _amount) external payable {
 
-    function stakeNft(uint256 _tokenId) external payable {}
+        if (_amount == 0) revert MonStaking__ZeroAmount();
 
-    function unstakeTokens(uint256 _amount) external payable {}
+        bool isUserAlreadyPremium = _isUserPremium(s_userTimeInfo[msg.sender].startingTimestamp);
 
-    function unstakeNft(uint256 _tokenId) external payable {}
+        _updateUserState(msg.sender);
+
+        s_userStakedTokenAmount[msg.sender] += _amount;
+        
+        if (!isUserAlreadyPremium && block.timestamp <= i_endPremiumTimestamp) _updateOtherChains(msg.sender, true);
+
+        IERC20(i_monsterToken).safeTransferFrom(msg.sender, address(this), _amount);
+
+        LiquidStakedMonster(i_lsToken).mint(msg.sender, _amount);
+
+        emit TokensStaked(msg.sender, _amount);
+    }
+
+    function stakeNft(uint256 _tokenId) external payable {
+
+        if(_tokenId == 0 || _tokenId > i_nftMaxSupply) revert MonStaking__InvalidTokenId();
+
+        bool isUserAlreadyPremium = _isUserPremium(s_userTimeInfo[msg.sender].startingTimestamp);
+
+        _updateUserState(msg.sender);
+
+        s_userNftAmount[msg.sender] += 1;
+        s_nftOwner[_tokenId] = msg.sender;
+
+        if (!isUserAlreadyPremium && block.timestamp <= i_endPremiumTimestamp) _updateOtherChains(msg.sender, true);
+
+        IERC721(i_nftToken).safeTransferFrom(msg.sender, address(this), _tokenId);
+
+        emit NftStaked(msg.sender, _tokenId);
+    }
+
+    // TODO - if like this remove payable
+    function unstakeTokens(uint256 _amount) external payable {
+
+        uint256 userTokenBalance = s_userStakedTokenAmount[msg.sender];
+
+        if (_amount == 0) revert MonStaking__ZeroAmount();
+        if (_amount > userTokenBalance) revert MonStaking__NotEnoughMonsterTokens();
+        if (_amount == userTokenBalance && s_userNftAmount[msg.sender] == 0) revert MonStaking__CannotTotallyUnstake();
+
+        _updateUserState(msg.sender);
+        
+        s_userStakedTokenAmount[msg.sender] -= _amount;
+
+        LiquidStakedMonster(i_lsToken).burn(msg.sender, _amount);
+
+        emit TokensUnstaked(msg.sender, _amount);
+    }
+
+    // TODO - if like this remove payable
+    function unstakeNft(uint256 _tokenId) external payable {
+
+        uint256 userNftBalance = s_userNftAmount[msg.sender];
+
+        if(_tokenId == 0 || _tokenId > i_nftMaxSupply) revert MonStaking__InvalidTokenId();
+        if(userNftBalance == 0) revert MonStaking__ZeroAmount();
+        if(userNftBalance == 1 && s_userStakedTokenAmount[msg.sender] == 0) revert MonStaking__CannotTotallyUnstake();
+
+        _updateUserState(msg.sender);
+
+        s_userNftAmount[msg.sender] -= 1;
+        delete s_nftOwner[_tokenId];
+
+        IERC721(i_nftToken).safeTransferFrom(address(this), msg.sender, _tokenId);
+
+        emit NftStaked(msg.sender, _tokenId);
+    }
 
     function requireUnstakeAll() external payable {}
 
-    function climUnstakedAssets() external ifTimelockAllows {}
+    function claimUnstakedAssets() external ifTimelockAllows {}
 
     function updateStakingBalance(address _from, address _to, uint256 _amount) external payable onlyLSMContract {
 
@@ -195,6 +269,7 @@ contract MonStaking is OApp, IERC721Receiver {
 
     // made if we are premium here and we want to signal it to a newly deployed contract on other chain
     function pingNewChainContract(uint32 _chainId) external payable {
+
         if (_chainId == 0) revert MonStaking__ZeroChainId();
         if (s_otherChainStakingContract[_chainId] == bytes32(0)) revert MonStaking__ChainNotSupported();
         if (s_isUserPremium[_chainId][msg.sender]) revert MonStaking__UserAlreadyPremium();
@@ -206,15 +281,17 @@ contract MonStaking is OApp, IERC721Receiver {
 
         MessagingFee memory _fee = _quote(_chainId, message, "", payInLzToken);
 
-        // Check for Lztokens is not needed because the transferFrom() will revert
-        if(!payInLzToken && msg.value < _fee.nativeFee) revert MonStaking__NotEnoughNativeTokens();
 
         _lzSend(_chainId, message, "", _fee, msg.sender);
 
         emit NewChainPinged(_chainId, msg.sender);
     }
 
-    function syncPoints() external {}
+    function syncPoints() external {
+        _updateUserState(msg.sender);
+
+        emit PointsSynced(msg.sender, s_userPoints[msg.sender]);
+    }
 
     function setMultiplier(Multipliers _multiplierType, uint256 _value) external onlyOwner {
         if (_value == 0) revert MonStaking__ZeroAmount();
@@ -252,6 +329,20 @@ contract MonStaking is OApp, IERC721Receiver {
     {
         return this.onERC721Received.selector;
     }
+
+    function _batchQuote(
+        uint32[] memory _dstEids,
+        bytes memory _message,
+        bytes calldata _extraSendOptions,
+        bool _payInLzToken
+    ) public view returns (MessagingFee memory totalFee) {
+        for (uint i = 0; i < _dstEids.length; i++) {
+            MessagingFee memory fee = _quote(_dstEids[i], _message, options, _payInLzToken);
+            totalFee.nativeFee += fee.nativeFee;
+            totalFee.lzTokenFee += fee.lzTokenFee;
+        }
+    }
+
 
     function _updateUserState(address _user) internal {
         uint256 userTokenBalance = s_userStakedTokenAmount[_user];
@@ -328,6 +419,30 @@ contract MonStaking is OApp, IERC721Receiver {
 
     function _updateOtherChains(address _user, bool _isPremium) internal {
 
+        uint256 chainsLength = s_supportedChains.length;
+
+        MessagingFee memory totalFee = _batchQuote(s_supportedChains, abi.encode(_user, _isPremium), "", msg.value <= 0);
+
+        if(msg.value > 0 && msg.value < totalFee.nativeFee) revert MonStaking__NotEnoughNativeTokens();
+
+        uint256 totalNativeFeeUsed = 0;
+        uint256 remainingValue = msg.value;
+
+        for (uint256 i = 0; i < chainsLength; i++) {
+            uint32 chainId = s_supportedChains[i];
+            MessagingFee memory fee = _quote(chainId, abi.encode(_user, _isPremium), "", msg.value <= 0);
+
+            if(msg.value > 0) {
+                if(remainingValue < fee.nativeFee) revert MonStaking__NotEnoughNativeTokens();
+                remainingValue -= fee.nativeFee;
+            }
+
+            totalNativeFeeUsed += fee.nativeFee;
+
+            _lzSend(chainId, abi.encode(_user, _isPremium), "", fee, _user);
+        }
+
+        emit ChainsUpdated(s_supportedChains, _user, _isPremium);
     }
 
     function _lzReceive(

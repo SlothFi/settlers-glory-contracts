@@ -114,7 +114,8 @@ contract MonStaking is OApp, IERC721Receiver {
     mapping(uint32 chainId => bytes32 otherChainStaking) public s_otherChainStakingContract;
     uint32[] public s_supportedChains;
     mapping(uint32 chainId => uint256 index) public s_chainIndex;
-    mapping(uint32 chainId => mapping(address user => bool isPremium)) public s_isUserPremium;
+    mapping(uint32 chainId => mapping(address user => bool isPremium)) public s_isUserPremiumOnOtherChains;
+    mapping(address user => bool isPremium) public s_isUserPremium;
     mapping(address user => UserUnstakeRequest unstakeRequest) public s_userUnstakeRequest;
 
     address public s_newProposedOwner;
@@ -361,7 +362,7 @@ contract MonStaking is OApp, IERC721Receiver {
 
         if (_chainId == 0) revert MonStaking__ZeroChainId();
         if (s_otherChainStakingContract[_chainId] == bytes32(0)) revert MonStaking__ChainNotSupported();
-        if (s_isUserPremium[_chainId][msg.sender]) revert MonStaking__UserAlreadyPremium();
+        if (s_isUserPremiumOnOtherChains[_chainId][msg.sender]) revert MonStaking__UserAlreadyPremium();
         if (!_isUserPremium(s_userTimeInfo[msg.sender].startingTimestamp)) revert MonStaking__UserNotPremium();
 
         bytes memory message = abi.encode(msg.sender, true);
@@ -437,7 +438,7 @@ contract MonStaking is OApp, IERC721Receiver {
         address oldOwner = owner();
 
         _transferOwnership(s_newProposedOwner);
-        
+
         delete s_newProposedOwner;
         emit OwnershipClaimed(msg.sender, oldOwner);
     }
@@ -567,7 +568,7 @@ contract MonStaking is OApp, IERC721Receiver {
     function _isUserPremiumOnOtherChains(address _user) internal view returns (bool) {
         for (uint256 i = 0; i < MAX_SUPPOERTED_CHAINS; i++) {
             uint32 chainId = s_supportedChains[i];
-            if(s_isUserPremium[chainId][_user]) return true;
+            if(s_isUserPremiumOnOtherChains[chainId][_user]) return true;
         }
         return false;
     }
@@ -619,7 +620,7 @@ contract MonStaking is OApp, IERC721Receiver {
 
         uint32 chainId = _origin.srcEid; 
 
-        s_isUserPremium[chainId][user] = isPremium;
+        s_isUserPremiumOnOtherChains[chainId][user] = isPremium;
 
         emit UserChainPremimUpdated(chainId, user, isPremium);
     }

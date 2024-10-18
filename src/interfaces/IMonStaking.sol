@@ -2,7 +2,6 @@
 
 pragma solidity 0.8.24;
 
-
 interface IMonStaking {
     function stakeTokens(uint256 _amount) external payable;
     function stakeNft(uint256 _tokenId) external payable;

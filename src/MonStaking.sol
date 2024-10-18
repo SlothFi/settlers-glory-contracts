@@ -6,7 +6,6 @@ import {OApp, Origin, MessagingFee} from "@layerzerolabs/oapp-evm/contracts/oapp
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IERC721Metadata} from "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -19,6 +18,7 @@ import {LiquidStakedMonster} from "./LiquidStakedMonster.sol";
 
 
 contract MonStaking is OApp, IERC721Receiver {
+
     using SafeERC20 for IERC20;
 
     enum Multipliers {
@@ -58,6 +58,12 @@ contract MonStaking is OApp, IERC721Receiver {
     error MonStaking__NotEnoughMonsterTokens();
     error MonStaking__CannotTotallyUnstake();
     error MonStaking__TokenIdArrayTooLong();
+    error MonStaking__OwnershipCannotBeRenounced();
+    error MonStaking__OwnershipCannotBeDirectlyTransferred();
+    error MonStaking__NotProposedOwner();
+    error MonStaking__SupportedChainLimitReached();
+    error MonStaking__PeersMismatch();
+    error MonStaking__ArrayLengthCannotBeZero();
 
     event TokenBaseMultiplierChanged(uint256 indexed _newValue);
     event TokenPremiumMultiplierChanged(uint256 indexed _newValue);
@@ -72,6 +78,9 @@ contract MonStaking is OApp, IERC721Receiver {
     event PointsSynced(address indexed _user, uint256 indexed _totalPoints);
     event TotalUnstakeRequired(address indexed _user, uint256 indexed _tokenAmount, uint256 indexed _nftAmount);
     event UnstakedAssetsClaimed(address indexed _user, uint256 indexed _tokenAmount, uint256[] indexed _tokenIds);
+    event NewOwnerProposed(address indexed _newOwner);
+    event OwnershipClaimed(address indexed _newOwner, address indexed _oldOwner);
+    event MultiplePeersEnabled(uint32[] indexed _chainIds, bytes32[] indexed _peers);
 
     uint256 public constant BPS = 10_000;
     uint256 public constant POINTS_DECIMALS = 1e6;
@@ -104,6 +113,8 @@ contract MonStaking is OApp, IERC721Receiver {
     uint32[MAX_SUPPOERTED_CHAINS] public s_supportedChains; // this is made for saving gas
     mapping(uint32 chainId => mapping(address user => bool isPremium)) public s_isUserPremium;
     mapping(address user => UserUnstakeRequest unstakeRequest) public s_userUnstakeRequest;
+
+    address public s_newProposedOwner;
 
     modifier onlyLSMContract() {
         if (msg.sender != i_lsToken) revert MonStaking__NotLSMContract();
@@ -408,6 +419,35 @@ contract MonStaking is OApp, IERC721Receiver {
         return s_userPoints[_user] + tokenPoints + nftPoints;
     }
 
+    function proposeNewOwner(address _newOwner) external onlyOwner {
+        if(_newOwner == address(0)) revert MonStaking__ZeroAddress();
+        s_newProposedOwner = _newOwner;
+        emit NewOwnerProposed(_newOwner);
+    }
+
+    function claimOwnerhip() external {
+        if(msg.sender != s_newProposedOwner) revert MonStaking__NotProposedOwner();
+        address oldOwner = owner();
+        _transferOwnership(s_newProposedOwner);
+        delete s_newProposedOwner;
+        emit OwnershipClaimed(owner(), oldOwner);
+    }
+
+    function batchSetPeers(uint32[] memory _chainIds, bytes32[] memory _peers) external onlyOwner {
+        uint256 chainIdsLength = _chainIds.length;
+        uint256 peersLength = _peers.length;
+
+        if(chainIdsLength == 0 || peersLength == 0) revert MonStaking__ArrayLengthCannotBeZero();
+        if(chainIdsLength > MAX_SUPPOERTED_CHAINS) revert MonStaking__SupportedChainLimitReached();
+        if(chainIdsLength != peersLength) revert MonStaking__PeersMismatch();
+
+        for (uint256 i = 0; i < chainIdsLength; i++) {
+            _setPeer(_chainIds[i], _peers[i]);
+        }
+
+        emit MultiplePeersEnabled(_chainIds, _peers);
+    }
+
     function onERC721Received(address, /*_operator*/ address, /*_from*/ uint256, /*_tokenId*/ bytes calldata /*_data*/ )
         external
         pure
@@ -415,6 +455,16 @@ contract MonStaking is OApp, IERC721Receiver {
         returns (bytes4)
     {
         return this.onERC721Received.selector;
+    }
+
+    // This is made because otherwise now new chains can be added
+    function renounceOwnership() public override onlyOwner {
+        revert MonStaking__OwnershipCannotBeRenounced();
+    }
+
+    // LZ is using signle step ownable this is for security measures
+    function transferOwnership(address newOwner) public override onlyOwner {
+        revert MonStaking__OwnershipCannotBeDirectlyTransferred();
     }
 
     function _batchQuote(
@@ -538,11 +588,28 @@ contract MonStaking is OApp, IERC721Receiver {
         emit ChainsUpdated(supportedChains, _user, _isPremium);
     }
 
+
     function _lzReceive(
         Origin calldata _origin,
         bytes32 _guid,
         bytes calldata _message,
         address _executor,
         bytes calldata _extraData
-    ) internal override {}
+    ) internal override {
+
+        (address user, bool isPremium) = abi.decode(_message, (address, bool));
+
+        s_isUserPremium[_origin.chainId][user] = isPremium;
+
+        emit ChainsUpdated([_origin.chainId], user, isPremium);
+    }
+
+    function _setPeer(uint32 _eid, bytes32 _peer) internal override {
+        if(s_supportedChains.length >= MAX_SUPPOERTED_CHAINS && s_otherChainStakingContract[_eid] == bytes32(0)) revert MonStaking__SupportedChainLimitReached();
+
+        s_otherChainStakingContract[_eid] = _peer;
+        s_supportedChains.push(_eid);
+
+        super._setPeer(_eid, _peer);
+    }
 }

@@ -75,12 +75,14 @@ contract MonStaking is OApp, IERC721Receiver {
     event TokensUnstaked(address indexed _user, uint256 indexed _amount);
     event NftStaked(address indexed _user, uint256 indexed _tokenId);
     event ChainsUpdated(uint32[] indexed _chainIds, address indexed _user, bool indexed _isPremium);
+    event UserChainPremimUpdated(uint32 indexed _chainId, address indexed _user, bool indexed _isPremium);
     event PointsSynced(address indexed _user, uint256 indexed _totalPoints);
     event TotalUnstakeRequired(address indexed _user, uint256 indexed _tokenAmount, uint256 indexed _nftAmount);
     event UnstakedAssetsClaimed(address indexed _user, uint256 indexed _tokenAmount, uint256[] indexed _tokenIds);
     event NewOwnerProposed(address indexed _newOwner);
     event OwnershipClaimed(address indexed _newOwner, address indexed _oldOwner);
     event MultiplePeersEnabled(uint32[] indexed _chainIds, bytes32[] indexed _peers);
+    event ChainRemoved(uint32 indexed _chainId);
 
     uint256 public constant BPS = 10_000;
     uint256 public constant POINTS_DECIMALS = 1e6;
@@ -110,7 +112,8 @@ contract MonStaking is OApp, IERC721Receiver {
     mapping(address user => uint256 points) public s_userPoints;
     mapping(address user => uint256 stakedTokenAmount) public s_userStakedTokenAmount;
     mapping(uint32 chainId => bytes32 otherChainStaking) public s_otherChainStakingContract;
-    uint32[MAX_SUPPOERTED_CHAINS] public s_supportedChains; // this is made for saving gas
+    uint32[] public s_supportedChains;
+    mapping(uint32 chainId => uint256 index) public s_chainIndex;
     mapping(uint32 chainId => mapping(address user => bool isPremium)) public s_isUserPremium;
     mapping(address user => UserUnstakeRequest unstakeRequest) public s_userUnstakeRequest;
 
@@ -125,6 +128,11 @@ contract MonStaking is OApp, IERC721Receiver {
         if (s_userUnstakeRequest[msg.sender].requestTimestamp + TIME_LOCK_DURATION > block.timestamp) {
             revert MonStaking__TimelockNotPassed();
         }
+        _;
+    }
+
+    modifier onlyProposedOwner() {
+        if (msg.sender != s_newProposedOwner) revert MonStaking__NotProposedOwner();
         _;
     }
 
@@ -425,12 +433,22 @@ contract MonStaking is OApp, IERC721Receiver {
         emit NewOwnerProposed(_newOwner);
     }
 
-    function claimOwnerhip() external {
-        if(msg.sender != s_newProposedOwner) revert MonStaking__NotProposedOwner();
+    function claimOwnerhip() external onlyProposedOwner {
         address oldOwner = owner();
+
         _transferOwnership(s_newProposedOwner);
+        
         delete s_newProposedOwner;
-        emit OwnershipClaimed(owner(), oldOwner);
+        emit OwnershipClaimed(msg.sender, oldOwner);
+    }
+
+    function removeSupportedChain(uint32 _chainId) external onlyOwner {
+        if (_chainId == 0) revert MonStaking__ZeroChainId();
+        if (s_otherChainStakingContract[_chainId] == bytes32(0)) revert MonStaking__ChainNotSupported();
+
+        _setPeer(_chainId, bytes32(0));
+
+        emit ChainRemoved(_chainId);
     }
 
     function batchSetPeers(uint32[] memory _chainIds, bytes32[] memory _peers) external onlyOwner {
@@ -458,12 +476,12 @@ contract MonStaking is OApp, IERC721Receiver {
     }
 
     // This is made because otherwise now new chains can be added
-    function renounceOwnership() public override onlyOwner {
+    function renounceOwnership() public view override onlyOwner {
         revert MonStaking__OwnershipCannotBeRenounced();
     }
 
     // LZ is using signle step ownable this is for security measures
-    function transferOwnership(address newOwner) public override onlyOwner {
+    function transferOwnership(address /** newOwner*/) public view override onlyOwner {
         revert MonStaking__OwnershipCannotBeDirectlyTransferred();
     }
 
@@ -591,24 +609,38 @@ contract MonStaking is OApp, IERC721Receiver {
 
     function _lzReceive(
         Origin calldata _origin,
-        bytes32 _guid,
+        bytes32 /** _guid*/,
         bytes calldata _message,
-        address _executor,
-        bytes calldata _extraData
+        address /** _executor*/,
+        bytes calldata /** _extraData*/
     ) internal override {
 
         (address user, bool isPremium) = abi.decode(_message, (address, bool));
 
-        s_isUserPremium[_origin.chainId][user] = isPremium;
+        uint32 chainId = _origin.srcEid; 
 
-        emit ChainsUpdated([_origin.chainId], user, isPremium);
+        s_isUserPremium[chainId][user] = isPremium;
+
+        emit UserChainPremimUpdated(chainId, user, isPremium);
     }
 
     function _setPeer(uint32 _eid, bytes32 _peer) internal override {
-        if(s_supportedChains.length >= MAX_SUPPOERTED_CHAINS && s_otherChainStakingContract[_eid] == bytes32(0)) revert MonStaking__SupportedChainLimitReached();
+
+        uint256 supportedChainsLength = s_supportedChains.length;
+        bool isChainAlreadySupported = s_otherChainStakingContract[_eid] != bytes32(0);
+
+        if(supportedChainsLength >= MAX_SUPPOERTED_CHAINS && !isChainAlreadySupported) revert MonStaking__SupportedChainLimitReached();
 
         s_otherChainStakingContract[_eid] = _peer;
-        s_supportedChains.push(_eid);
+        if(!isChainAlreadySupported) {
+            s_supportedChains.push(_eid);
+            s_chainIndex[_eid] = supportedChainsLength;
+        }else if(isChainAlreadySupported && _peer == bytes32(0)) {
+            uint256 index = s_chainIndex[_eid];
+            s_supportedChains[index] = s_supportedChains[supportedChainsLength];
+            s_chainIndex[s_supportedChains[index]] = index;
+            s_supportedChains.pop();
+        }
 
         super._setPeer(_eid, _peer);
     }

@@ -219,6 +219,8 @@ contract MonStaking is OApp, IERC721Receiver {
 
         IERC721(i_nftToken).safeTransferFrom(msg.sender, address(this), _tokenId);
 
+        _toggleNftDelegation(msg.sender, _tokenId, true);
+
         emit NftStaked(msg.sender, _tokenId);
     }
 
@@ -265,6 +267,8 @@ contract MonStaking is OApp, IERC721Receiver {
         }
 
         IERC721(i_nftToken).safeTransferFrom(address(this), msg.sender, _tokenId);
+
+        _toggleNftDelegation(msg.sender, _tokenId, false);
 
         emit NftStaked(msg.sender, _tokenId);
     }
@@ -323,6 +327,7 @@ contract MonStaking is OApp, IERC721Receiver {
         for (uint256 i = 0; i < tokenIdsLength; i++) {
             delete s_nftOwner[_tokenIds[i]];
             IERC721(i_nftToken).safeTransferFrom(address(this), msg.sender, _tokenIds[i]);
+            _toggleNftDelegation(msg.sender, _tokenIds[i], false);
         }
 
         emit UnstakedAssetsClaimed(msg.sender, userUnstakeRequest.tokenAmount, _tokenIds);
@@ -563,6 +568,10 @@ contract MonStaking is OApp, IERC721Receiver {
 
     function _isUserPremium(uint256 _startTimestamp) internal view returns (bool) {
         return _startTimestamp <= i_endPremiumTimestamp && _startTimestamp >= i_crationTimestamp;
+    }
+
+    function _toggleNftDelegation(address _user, uint256 _tokenId, bool _isDelegated) internal {
+        i_delegateRegistry.delegateERC721(_user, i_nftToken, _tokenId, bytes32(0), _isDelegated);
     }
 
     function _isUserPremiumOnOtherChains(address _user) internal view returns (bool) {

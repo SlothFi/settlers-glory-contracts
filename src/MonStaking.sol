@@ -206,14 +206,19 @@ contract MonStaking is OApp, IERC721Receiver {
     function unstakeTokens(uint256 _amount) external {
 
         uint256 userTokenBalance = s_userStakedTokenAmount[msg.sender];
+        bool isUserPremium = _isUserPremium(s_userTimeInfo[msg.sender].startingTimestamp) || _isUserPremiumOnOtherChains(msg.sender); // TODO - update when you have total premium logic
 
         if (_amount == 0) revert MonStaking__ZeroAmount();
         if (_amount > userTokenBalance) revert MonStaking__NotEnoughMonsterTokens();
-        if (_amount == userTokenBalance && s_userNftAmount[msg.sender] == 0) revert MonStaking__CannotTotallyUnstake();
+        if (_amount == userTokenBalance && s_userNftAmount[msg.sender] == 0 && isPremium) revert MonStaking__CannotTotallyUnstake();
 
         _updateUserState(msg.sender);
         
         s_userStakedTokenAmount[msg.sender] -= _amount;
+
+        if(s_userStakedTokenAmount[msg.sender] == 0 && s_userNftAmount[msg.sender] == 0) {
+            _clearUserTimeInfo(msg.sender);
+        }
 
         LiquidStakedMonster(i_lsToken).burn(msg.sender, _amount);
 
@@ -224,15 +229,20 @@ contract MonStaking is OApp, IERC721Receiver {
     function unstakeNft(uint256 _tokenId) external payable {
 
         uint256 userNftBalance = s_userNftAmount[msg.sender];
+        bool isUserPremium = _isUserPremium(s_userTimeInfo[msg.sender].startingTimestamp) || _isUserPremiumOnOtherChains(msg.sender); // TODO - update when you have total premium logic
 
         if(_tokenId == 0 || _tokenId > i_nftMaxSupply) revert MonStaking__InvalidTokenId();
         if(userNftBalance == 0) revert MonStaking__ZeroAmount();
-        if(userNftBalance == 1 && s_userStakedTokenAmount[msg.sender] == 0) revert MonStaking__CannotTotallyUnstake();
+        if(userNftBalance == 1 && s_userStakedTokenAmount[msg.sender] == 0 && isUserPremium) revert MonStaking__CannotTotallyUnstake();
 
         _updateUserState(msg.sender);
 
         s_userNftAmount[msg.sender] -= 1;
         delete s_nftOwner[_tokenId];
+
+        if(s_userStakedTokenAmount[msg.sender] == 0 && s_userNftAmount[msg.sender] == 0) {
+            _clearUserTimeInfo(msg.sender);
+        }
 
         IERC721(i_nftToken).safeTransferFrom(address(this), msg.sender, _tokenId);
 
@@ -263,6 +273,10 @@ contract MonStaking is OApp, IERC721Receiver {
             userUnstakeRequest.requestTimestamp = block.timestamp;
             s_userUnstakeRequest[msg.sender] = userUnstakeRequest;
         }
+
+        _clearUserTimeInfo(msg.sender);
+
+        if(userTokenBalance > 0) LiquidStakedMonster(i_lsToken).burn(msg.sender, userTokenBalance);
 
         _updateOtherChains(msg.sender, false);
 
@@ -377,6 +391,23 @@ contract MonStaking is OApp, IERC721Receiver {
         }
     }
 
+    function getQuote(       
+        uint32[] memory _dstEids,
+        bytes memory _message,
+        bytes memory _extraSendOptions,
+        bool _payInLzToken
+    ) external view returns (MessagingFee memory totalFee){
+        return _batchQuote(_dstEids, _message, _extraSendOptions, _payInLzToken);
+    }
+
+    function getPotentialCurrentPoints(address _user) external view returns (uint256){
+        TimeInfo memory userTimeInfo = s_userTimeInfo[_user];
+        bool isPremium = _isUserPremium(userTimeInfo.startingTimestamp) || _isUserPremiumOnOtherChains(_user);
+        uint256 tokenPoints = _calculateTokenPoints(s_userStakedTokenAmount[_user], userTimeInfo.lastUpdatedTimestamp, block.timestamp, isPremium);
+        uint256 nftPoints = _calculateNftPoints(s_userNftAmount[_user], userTimeInfo.lastUpdatedTimestamp, block.timestamp, isPremium);
+        return s_userPoints[_user] + tokenPoints + nftPoints;
+    }
+
     function onERC721Received(address, /*_operator*/ address, /*_from*/ uint256, /*_tokenId*/ bytes calldata /*_data*/ )
         external
         pure
@@ -478,7 +509,7 @@ contract MonStaking is OApp, IERC721Receiver {
         uint256 chainsLength = s_supportedChains.length;
 
         uint32[] memory supportedChains = new uint32[](chainsLength);
-        for (uint256 i = 0; i < MAX_SUPPOERTED_CHAINS; i++) {
+        for (uint256 i = 0; i < chainsLength; i++) {
             supportedChains[i] = s_supportedChains[i];
         }
 

@@ -57,6 +57,7 @@ contract MonStaking is OApp, IERC721Receiver {
     error MonStaking__NotEnoughNativeTokens();
     error MonStaking__NotEnoughMonsterTokens();
     error MonStaking__CannotTotallyUnstake();
+    error MonStaking__TokenIdArrayTooLong();
 
     event TokenBaseMultiplierChanged(uint256 indexed _newValue);
     event TokenPremiumMultiplierChanged(uint256 indexed _newValue);
@@ -69,11 +70,14 @@ contract MonStaking is OApp, IERC721Receiver {
     event NftStaked(address indexed _user, uint256 indexed _tokenId);
     event ChainsUpdated(uint32[] indexed _chainIds, address indexed _user, bool indexed _isPremium);
     event PointsSynced(address indexed _user, uint256 indexed _totalPoints);
+    event TotalUnstakeRequired(address indexed _user, uint256 indexed _tokenAmount, uint256 indexed _nftAmount);
+    event UnstakedAssetsClaimed(address indexed _user, uint256 indexed _tokenAmount, uint256[MAX_BATCH_NFT_WITHDRAW] indexed _tokenIds);
 
     uint256 public constant BPS = 10_000;
     uint256 public constant POINTS_DECIMALS = 1e6;
     uint256 public constant MAX_SUPPOERTED_CHAINS = 10;
     uint256 public constant TIME_LOCK_DURATION = 3 hours;
+    uint256 public constant MAX_BATCH_NFT_WITHDRAW = 20;
 
     uint256 public immutable i_crationTimestamp;
     uint256 public immutable i_premiumDuration;
@@ -180,7 +184,7 @@ contract MonStaking is OApp, IERC721Receiver {
         emit TokensStaked(msg.sender, _amount);
     }
 
-    function stakeNft(uint256 _tokenId) external payable {
+    function stakeNft(uint256 _tokenId) external {
 
         if(_tokenId == 0 || _tokenId > i_nftMaxSupply) revert MonStaking__InvalidTokenId();
 
@@ -199,7 +203,7 @@ contract MonStaking is OApp, IERC721Receiver {
     }
 
     // TODO - if like this remove payable
-    function unstakeTokens(uint256 _amount) external payable {
+    function unstakeTokens(uint256 _amount) external {
 
         uint256 userTokenBalance = s_userStakedTokenAmount[msg.sender];
 
@@ -235,9 +239,60 @@ contract MonStaking is OApp, IERC721Receiver {
         emit NftStaked(msg.sender, _tokenId);
     }
 
-    function requireUnstakeAll() external payable {}
+    function requireUnstakeAll() external payable {
+        
+        uint256 userTokenBalance = s_userStakedTokenAmount[msg.sender];
+        uint256 userNftBalance = s_userNftAmount[msg.sender];
 
-    function claimUnstakedAssets() external ifTimelockAllows {}
+        if(userTokenBalance == 0 && userNftBalance == 0) revert MonStaking__ZeroAmount();
+        // TODO - add check if user is premium on this chain
+
+        _updateUserState(msg.sender);
+
+        s_userStakedTokenAmount[msg.sender] = 0;
+        s_userNftAmount[msg.sender] = 0;
+
+        UserUnstakeRequest memory userUnstakeRequest = s_userUnstakeRequest[msg.sender];
+
+        // If it is a new request we create a new one else we update the existing one
+        if(userUnstakeRequest.requestTimestamp == 0){
+            s_userUnstakeRequest[msg.sender] = UserUnstakeRequest(userTokenBalance, userNftBalance, block.timestamp);
+        }else {
+            userUnstakeRequest.tokenAmount += userTokenBalance;
+            userUnstakeRequest.nftAmount += userNftBalance;
+            userUnstakeRequest.requestTimestamp = block.timestamp;
+            s_userUnstakeRequest[msg.sender] = userUnstakeRequest;
+        }
+
+        _updateOtherChains(msg.sender, false);
+
+        emit TotalUnstakeRequired(msg.sender, userTokenBalance, userNftBalance);
+    }
+
+    function claimUnstakedAssets(uint256[MAX_BATCH_NFT_WITHDRAW] calldata _tokenIds) external ifTimelockAllows {
+
+        uint256 tokenIdsLength = _tokenIds.length;
+
+        if(tokenIdsLength > MAX_BATCH_NFT_WITHDRAW) revert MonStaking__TokenIdArrayTooLong();
+
+        UserUnstakeRequest memory userUnstakeRequest = s_userUnstakeRequest[msg.sender];
+
+        if(userUnstakeRequest.nftAmount == 0) {
+            delete s_userUnstakeRequest[msg.sender];
+        }else {
+            s_userUnstakeRequest[msg.sender].nftAmount -= tokenIdsLength;
+            s_userUnstakeRequest[msg.sender].tokenAmount = 0;
+        }
+
+        IERC20(i_monsterToken).safeTransfer(msg.sender, userUnstakeRequest.tokenAmount);
+
+        for (uint256 i = 0; i < tokenIdsLength; i++) {
+            delete s_nftOwner[_tokenIds[i]];
+            IERC721(i_nftToken).safeTransferFrom(address(this), msg.sender, _tokenIds[i]);
+        }
+
+        emit UnstakedAssetsClaimed(msg.sender, userUnstakeRequest.tokenAmount, _tokenIds);
+    }
 
     function updateStakingBalance(address _from, address _to, uint256 _amount) external payable onlyLSMContract {
 
@@ -334,11 +389,11 @@ contract MonStaking is OApp, IERC721Receiver {
     function _batchQuote(
         uint32[] memory _dstEids,
         bytes memory _message,
-        bytes calldata _extraSendOptions,
+        bytes memory _extraSendOptions,
         bool _payInLzToken
     ) public view returns (MessagingFee memory totalFee) {
         for (uint i = 0; i < _dstEids.length; i++) {
-            MessagingFee memory fee = _quote(_dstEids[i], _message, options, _payInLzToken);
+            MessagingFee memory fee = _quote(_dstEids[i], _message, _extraSendOptions, _payInLzToken);
             totalFee.nativeFee += fee.nativeFee;
             totalFee.lzTokenFee += fee.lzTokenFee;
         }
@@ -422,7 +477,13 @@ contract MonStaking is OApp, IERC721Receiver {
 
         uint256 chainsLength = s_supportedChains.length;
 
-        MessagingFee memory totalFee = _batchQuote(s_supportedChains, abi.encode(_user, _isPremium), "", msg.value <= 0);
+        uint32[] memory supportedChains = new uint32[](chainsLength);
+        for (uint256 i = 0; i < MAX_SUPPOERTED_CHAINS; i++) {
+            supportedChains[i] = s_supportedChains[i];
+        }
+
+
+        MessagingFee memory totalFee = _batchQuote(supportedChains, abi.encode(_user, _isPremium), "", msg.value <= 0);
 
         if(msg.value > 0 && msg.value < totalFee.nativeFee) revert MonStaking__NotEnoughNativeTokens();
 
@@ -430,7 +491,7 @@ contract MonStaking is OApp, IERC721Receiver {
         uint256 remainingValue = msg.value;
 
         for (uint256 i = 0; i < chainsLength; i++) {
-            uint32 chainId = s_supportedChains[i];
+            uint32 chainId = supportedChains[i];
             MessagingFee memory fee = _quote(chainId, abi.encode(_user, _isPremium), "", msg.value <= 0);
 
             if(msg.value > 0) {
@@ -443,7 +504,7 @@ contract MonStaking is OApp, IERC721Receiver {
             _lzSend(chainId, abi.encode(_user, _isPremium), "", fee, _user);
         }
 
-        emit ChainsUpdated(s_supportedChains, _user, _isPremium);
+        emit ChainsUpdated(supportedChains, _user, _isPremium);
     }
 
     function _lzReceive(

@@ -80,7 +80,7 @@ contract LiquidStakedMonster is ERC20, AccessControl {
     }
 
     function _update(address _from, address _to, uint256 _value) internal override {
-        if(_from != address(0) && (_to != address(0) || _to != s_marketPlace)) revert LiquidStakedMonster__TokenNotTransferable();
+        if(_from != address(0) && (_to != address(0) && _to != s_marketPlace)) revert LiquidStakedMonster__TokenNotTransferable();
         super._update(_from, _to, _value);
     }
 }

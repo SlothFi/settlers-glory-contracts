@@ -71,7 +71,7 @@ contract MonStaking is OApp, IERC721Receiver {
     event ChainsUpdated(uint32[] indexed _chainIds, address indexed _user, bool indexed _isPremium);
     event PointsSynced(address indexed _user, uint256 indexed _totalPoints);
     event TotalUnstakeRequired(address indexed _user, uint256 indexed _tokenAmount, uint256 indexed _nftAmount);
-    event UnstakedAssetsClaimed(address indexed _user, uint256 indexed _tokenAmount, uint256[MAX_BATCH_NFT_WITHDRAW] indexed _tokenIds);
+    event UnstakedAssetsClaimed(address indexed _user, uint256 indexed _tokenAmount, uint256[] indexed _tokenIds);
 
     uint256 public constant BPS = 10_000;
     uint256 public constant POINTS_DECIMALS = 1e6;
@@ -210,7 +210,7 @@ contract MonStaking is OApp, IERC721Receiver {
 
         if (_amount == 0) revert MonStaking__ZeroAmount();
         if (_amount > userTokenBalance) revert MonStaking__NotEnoughMonsterTokens();
-        if (_amount == userTokenBalance && s_userNftAmount[msg.sender] == 0 && isPremium) revert MonStaking__CannotTotallyUnstake();
+        if (_amount == userTokenBalance && s_userNftAmount[msg.sender] == 0 && isUserPremium) revert MonStaking__CannotTotallyUnstake();
 
         _updateUserState(msg.sender);
         
@@ -283,7 +283,7 @@ contract MonStaking is OApp, IERC721Receiver {
         emit TotalUnstakeRequired(msg.sender, userTokenBalance, userNftBalance);
     }
 
-    function claimUnstakedAssets(uint256[MAX_BATCH_NFT_WITHDRAW] calldata _tokenIds) external ifTimelockAllows {
+    function claimUnstakedAssets(uint256[] calldata _tokenIds) external ifTimelockAllows {
 
         uint256 tokenIdsLength = _tokenIds.length;
 

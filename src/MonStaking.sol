@@ -607,8 +607,14 @@ contract MonStaking is OApp, IERC721Receiver {
 
         uint32 chainId = _origin.srcEid; 
 
-        if (!s_isUserPremium[user] && isPremium) s_isUserPremium[user] = isPremium;
         s_isUserPremiumOnOtherChains[chainId][user] = isPremium;
+
+        if (!s_isUserPremium[user] && isPremium) s_isUserPremium[user] = isPremium;
+
+        if (
+            s_isUserPremium[user] && !_isUserPremiumOnOtherChains(user) && !isPremium
+            && s_userStakedTokenAmount[user] == 0 && s_userNftAmount[user] == 0
+        ) s_isUserPremium[user] = isPremium;
 
         emit UserChainPremimUpdated(chainId, user, isPremium);
     }

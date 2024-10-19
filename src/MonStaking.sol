@@ -111,6 +111,7 @@ contract MonStaking is OApp, IERC721Receiver {
     mapping(uint256 tokenId => address owner) public s_nftOwner;
     mapping(address user => uint256 points) public s_userPoints;
     mapping(address user => uint256 stakedTokenAmount) public s_userStakedTokenAmount;
+    mapping(address user => uint256 lastUpdatedTimestamp) public s_userLastUpdatedTimestamp;
     mapping(uint32 chainId => bytes32 otherChainStaking) public s_otherChainStakingContract;
     uint32[] public s_supportedChains;
     mapping(uint32 chainId => uint256 index) public s_chainIndex;
@@ -189,13 +190,11 @@ contract MonStaking is OApp, IERC721Receiver {
 
         if (_amount == 0) revert MonStaking__ZeroAmount();
 
-        bool isUserAlreadyPremium = _isUserPremium(s_userTimeInfo[msg.sender].startingTimestamp);
-
         _updateUserState(msg.sender);
 
         s_userStakedTokenAmount[msg.sender] += _amount;
         
-        if (!isUserAlreadyPremium && block.timestamp <= i_endPremiumTimestamp) _updateOtherChains(msg.sender, true);
+        if (!s_isUserPremium[msg.sender] && block.timestamp <= i_endPremiumTimestamp) _updateOtherChains(msg.sender, true);
 
         IERC20(i_monsterToken).safeTransferFrom(msg.sender, address(this), _amount);
 
@@ -208,14 +207,12 @@ contract MonStaking is OApp, IERC721Receiver {
 
         if(_tokenId == 0 || _tokenId > i_nftMaxSupply) revert MonStaking__InvalidTokenId();
 
-        bool isUserAlreadyPremium = _isUserPremium(s_userTimeInfo[msg.sender].startingTimestamp);
-
         _updateUserState(msg.sender);
 
         s_userNftAmount[msg.sender] += 1;
         s_nftOwner[_tokenId] = msg.sender;
 
-        if (!isUserAlreadyPremium && block.timestamp <= i_endPremiumTimestamp) _updateOtherChains(msg.sender, true);
+        if (!s_isUserPremium[msg.sender] && block.timestamp <= i_endPremiumTimestamp) _updateOtherChains(msg.sender, true);
 
         IERC721(i_nftToken).safeTransferFrom(msg.sender, address(this), _tokenId);
 
@@ -228,11 +225,10 @@ contract MonStaking is OApp, IERC721Receiver {
     function unstakeTokens(uint256 _amount) external {
 
         uint256 userTokenBalance = s_userStakedTokenAmount[msg.sender];
-        bool isUserPremium = _isUserPremium(s_userTimeInfo[msg.sender].startingTimestamp) || _isUserPremiumOnOtherChains(msg.sender); // TODO - update when you have total premium logic
 
         if (_amount == 0) revert MonStaking__ZeroAmount();
         if (_amount > userTokenBalance) revert MonStaking__NotEnoughMonsterTokens();
-        if (_amount == userTokenBalance && s_userNftAmount[msg.sender] == 0 && isUserPremium) revert MonStaking__CannotTotallyUnstake();
+        if (_amount == userTokenBalance && s_userNftAmount[msg.sender] == 0 && s_isUserPremium[msg.sender]) revert MonStaking__CannotTotallyUnstake();
 
         _updateUserState(msg.sender);
         
@@ -251,11 +247,10 @@ contract MonStaking is OApp, IERC721Receiver {
     function unstakeNft(uint256 _tokenId) external payable {
 
         uint256 userNftBalance = s_userNftAmount[msg.sender];
-        bool isUserPremium = _isUserPremium(s_userTimeInfo[msg.sender].startingTimestamp) || _isUserPremiumOnOtherChains(msg.sender); // TODO - update when you have total premium logic
 
         if(_tokenId == 0 || _tokenId > i_nftMaxSupply) revert MonStaking__InvalidTokenId();
         if(userNftBalance == 0) revert MonStaking__ZeroAmount();
-        if(userNftBalance == 1 && s_userStakedTokenAmount[msg.sender] == 0 && isUserPremium) revert MonStaking__CannotTotallyUnstake();
+        if(userNftBalance == 1 && s_userStakedTokenAmount[msg.sender] == 0 && s_isUserPremium[msg.sender]) revert MonStaking__CannotTotallyUnstake();
 
         _updateUserState(msg.sender);
 
@@ -274,14 +269,16 @@ contract MonStaking is OApp, IERC721Receiver {
     }
 
     function requireUnstakeAll() external payable {
-        
+
         uint256 userTokenBalance = s_userStakedTokenAmount[msg.sender];
-        uint256 userNftBalance = s_userNftAmount[msg.sender];
+        uint256 userNftBalance =  s_userNftAmount[msg.sender];
 
         if(userTokenBalance == 0 && userNftBalance == 0) revert MonStaking__ZeroAmount();
         // TODO - add check if user is premium on this chain
 
         _updateUserState(msg.sender);
+
+        if(s_isUserPremium[msg.sender] && !_isUserPremiumOnOtherChains(msg.sender)) s_isUserPremium[msg.sender] = false;
 
         s_userStakedTokenAmount[msg.sender] = 0;
         s_userNftAmount[msg.sender] = 0;
@@ -344,15 +341,11 @@ contract MonStaking is OApp, IERC721Receiver {
         s_userStakedTokenAmount[_from] -= _amount;
         s_userStakedTokenAmount[_to] += _amount;
 
-        // TODO - remove variables
-        uint256 fromTokenBalance = s_userStakedTokenAmount[_from];
-        uint256 fromNftBalance = s_userNftAmount[_from];
-        bool isFromPremium = _isUserPremium(s_userTimeInfo[_from].startingTimestamp);
 
-        if (fromTokenBalance == 0 && fromNftBalance == 0) {
+        if (s_userStakedTokenAmount[_from] == 0 && s_userNftAmount[_from] == 0) {
             _clearUserTimeInfo(_from);
 
-            if(isFromPremium) {
+            if(s_isUserPremium[_from]) {
 
                 _updateOtherChains(_from, false);
             }
@@ -508,35 +501,28 @@ contract MonStaking is OApp, IERC721Receiver {
     function _updateUserState(address _user) internal {
         uint256 userTokenBalance = s_userStakedTokenAmount[_user];
         uint256 userNftBalance = s_userNftAmount[_user];
-        TimeInfo memory userTimeInfo = s_userTimeInfo[_user];
+        uint256 lastUpdatedTimestamp = s_userLastUpdatedTimestamp[_user];
 
-        _updateUserPoints(userTokenBalance, userNftBalance, userTimeInfo, _user);
-        _updateUserTimeInfo();
+        _updateUserPoints(userTokenBalance, userNftBalance, lastUpdatedTimestamp, _user);
+        _updateUserTimeInfo(_user);
     }
 
     function _updateUserPoints(
         uint256 _userTokenBalance,
         uint256 _userNftBalance,
-        TimeInfo memory _userTimeInfo,
+        uint256 _lastUpdatedTimestamp,
         address _user
     ) internal {
-        uint256 currentTimestamp = block.timestamp;
-        // Gas efficient because if first case evaluates to true, the second one is not checked - maybe a better way to do this
-        bool isPremium = _isUserPremium(_userTimeInfo.startingTimestamp) || _isUserPremiumOnOtherChains(_user);
-        uint256 tokenPoints = _calculateTokenPoints(_userTokenBalance, _userTimeInfo.lastUpdatedTimestamp, currentTimestamp, isPremium);
-        uint256 nftPoints = _calculateNftPoints(_userNftBalance, _userTimeInfo.lastUpdatedTimestamp, currentTimestamp, isPremium);
-        s_userPoints[_user] += tokenPoints + nftPoints;
+        bool isPremium = s_isUserPremium[_user];
+        s_userPoints[_user] += _calculateTokenPoints(_userTokenBalance, _lastUpdatedTimestamp, block.timestamp, isPremium) + _calculateNftPoints(_userNftBalance, _lastUpdatedTimestamp, block.timestamp, isPremium);
     }
 
-    function _updateUserTimeInfo() internal {
-        s_userTimeInfo[msg.sender].lastUpdatedTimestamp = block.timestamp;
-        if(s_userTimeInfo[msg.sender].startingTimestamp == 0) {
-            s_userTimeInfo[msg.sender].startingTimestamp = block.timestamp;
-        }
+    function _updateUserTimeInfo(address _user) internal {
+        s_userLastUpdatedTimestamp[_user] = block.timestamp;
     }
 
     function _clearUserTimeInfo(address _user) internal {
-        delete s_userTimeInfo[_user];
+        delete s_userLastUpdatedTimestamp[_user];
     }
 
     function _calculateTokenPoints(
@@ -627,8 +613,11 @@ contract MonStaking is OApp, IERC721Receiver {
 
         (address user, bool isPremium) = abi.decode(_message, (address, bool));
 
+        _updateUserState(user);
+
         uint32 chainId = _origin.srcEid; 
 
+        if (!s_isUserPremium[user] && isPremium) s_isUserPremium[user] = isPremium;
         s_isUserPremiumOnOtherChains[chainId][user] = isPremium;
 
         emit UserChainPremimUpdated(chainId, user, isPremium);
@@ -641,15 +630,18 @@ contract MonStaking is OApp, IERC721Receiver {
 
         if(supportedChainsLength >= MAX_SUPPOERTED_CHAINS && !isChainAlreadySupported) revert MonStaking__SupportedChainLimitReached();
 
+        uint256 index = s_chainIndex[_eid];
+
         s_otherChainStakingContract[_eid] = _peer;
         if(!isChainAlreadySupported) {
             s_supportedChains.push(_eid);
             s_chainIndex[_eid] = supportedChainsLength;
         }else if(isChainAlreadySupported && _peer == bytes32(0)) {
-            uint256 index = s_chainIndex[_eid];
             s_supportedChains[index] = s_supportedChains[supportedChainsLength];
             s_chainIndex[s_supportedChains[index]] = index;
             s_supportedChains.pop();
+        }else {
+            s_supportedChains[index] = _eid;
         }
 
         super._setPeer(_eid, _peer);

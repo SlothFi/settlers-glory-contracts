@@ -28,11 +28,6 @@ contract MonStaking is OApp, IERC721Receiver {
         NFT_PREMIUM
     }
 
-    struct TimeInfo {
-        uint256 lastUpdatedTimestamp;
-        uint256 startingTimestamp;
-    }
-
     struct UserUnstakeRequest {
         uint256 tokenAmount;
         uint256 nftAmount;
@@ -106,7 +101,6 @@ contract MonStaking is OApp, IERC721Receiver {
     uint256 public s_nftBaseMultiplier;
     uint256 public s_nftPremiumMultiplier;
 
-    mapping(address user => TimeInfo timeInfo) public s_userTimeInfo;
     mapping(address user => uint256 nftAmount) public s_userNftAmount;
     mapping(uint256 tokenId => address owner) public s_nftOwner;
     mapping(address user => uint256 points) public s_userPoints;
@@ -361,7 +355,7 @@ contract MonStaking is OApp, IERC721Receiver {
         if (_chainId == 0) revert MonStaking__ZeroChainId();
         if (s_otherChainStakingContract[_chainId] == bytes32(0)) revert MonStaking__ChainNotSupported();
         if (s_isUserPremiumOnOtherChains[_chainId][msg.sender]) revert MonStaking__UserAlreadyPremium();
-        if (!_isUserPremium(s_userTimeInfo[msg.sender].startingTimestamp)) revert MonStaking__UserNotPremium();
+        if (!s_isUserPremium[msg.sender]) revert MonStaking__UserNotPremium();
 
         bytes memory message = abi.encode(msg.sender, true);
 
@@ -419,10 +413,10 @@ contract MonStaking is OApp, IERC721Receiver {
     }
 
     function getPotentialCurrentPoints(address _user) external view returns (uint256){
-        TimeInfo memory userTimeInfo = s_userTimeInfo[_user];
-        bool isPremium = _isUserPremium(userTimeInfo.startingTimestamp) || _isUserPremiumOnOtherChains(_user);
-        uint256 tokenPoints = _calculateTokenPoints(s_userStakedTokenAmount[_user], userTimeInfo.lastUpdatedTimestamp, block.timestamp, isPremium);
-        uint256 nftPoints = _calculateNftPoints(s_userNftAmount[_user], userTimeInfo.lastUpdatedTimestamp, block.timestamp, isPremium);
+        uint256 lastTimestamp = s_userLastUpdatedTimestamp[_user];
+        bool isPremium = s_isUserPremium[_user];
+        uint256 tokenPoints = _calculateTokenPoints(s_userStakedTokenAmount[_user], lastTimestamp, block.timestamp, isPremium);
+        uint256 nftPoints = _calculateNftPoints(s_userNftAmount[_user], lastTimestamp, block.timestamp, isPremium);
         return s_userPoints[_user] + tokenPoints + nftPoints;
     }
 
@@ -550,10 +544,6 @@ contract MonStaking is OApp, IERC721Receiver {
 
     function _enforcePointDecimals(uint256 _points) internal pure returns (uint256) {
         return _points * POINTS_DECIMALS;
-    }
-
-    function _isUserPremium(uint256 _startTimestamp) internal view returns (bool) {
-        return _startTimestamp <= i_endPremiumTimestamp && _startTimestamp >= i_crationTimestamp;
     }
 
     function _toggleNftDelegation(address _user, uint256 _tokenId, bool _isDelegated) internal {

@@ -112,7 +112,7 @@ contract MonStaking is OApp, IERC721Receiver {
     mapping(uint32 chainId => bytes32 otherChainStaking) public s_otherChainStakingContract;
     uint32[] public s_supportedChains;
     mapping(uint32 chainId => uint256 index) public s_chainIndex;
-    mapping(uint32 chainId => mapping(address user => bool isPremium)) public s_isUserPremiumOnOtherChains;
+    mapping(address user => uint256 bitmap) public s_isUserPremiumOnOtherChains;
     mapping(address user => bool isPremium) public s_isUserPremium;
     mapping(address user => UserUnstakeRequest unstakeRequest) public s_userUnstakeRequest;
 
@@ -389,7 +389,7 @@ contract MonStaking is OApp, IERC721Receiver {
 
         if (_chainId == 0) revert MonStaking__ZeroChainId();
         if (s_otherChainStakingContract[_chainId] == bytes32(0)) revert MonStaking__ChainNotSupported();
-        if (s_isUserPremiumOnOtherChains[_chainId][msg.sender]) revert MonStaking__UserAlreadyPremium();
+        if (_isChainPremium(s_isUserPremiumOnOtherChains[msg.sender], _chainId)) revert MonStaking__UserAlreadyPremium();
         if (!s_isUserPremium[msg.sender]) revert MonStaking__UserNotPremium();
 
         bytes memory message = abi.encode(msg.sender, true);
@@ -583,21 +583,24 @@ contract MonStaking is OApp, IERC721Receiver {
 
     /// BITMAP FUNCTIONALITIES
 
-    function _enableChain(uint32 _chainId) internal {
+    function _enableChainPremium(uint32 _chainId, address _user) internal {
+        s_isUserPremiumOnOtherChains[_user] |= _getBitmask(_getChainIndex(_chainId));
+    }
 
+    function _disableChainPremium(uint32 _chainId, address _user) internal {
+        s_isUserPremiumOnOtherChains[_user] &= ~(_getBitmask(_getChainIndex(_chainId)));
     }
 
     function _getChainIndex(uint32 _chainId) internal pure returns(uint256){
         return _chainId % BITMAP_BOUND;
     }
 
-    function _getBitMask(uint256 _chainIndex) internal pure returns(uint256){
+    function _getBitmask(uint256 _chainIndex) internal pure returns(uint256){
         return 1 << _chainIndex;
     }
 
-    // maybe useless
-    function _isIndexInBitmap(uint256 _chainIdIndex, uint256 _bitmap) internal pure returns(bool) {
-        return _bitmap >> _chainIdIndex != 0;
+    function _isChainPremium(uint256 _bitmap, uint32 _chainId) internal pure returns(bool){
+        return _bitmap >> _getChainIndex(_chainId) != 0;
     }
 
     function _toggleNftDelegation(address _user, uint256 _tokenId, bool _isDelegated) internal {
@@ -605,11 +608,7 @@ contract MonStaking is OApp, IERC721Receiver {
     }
 
     function _isUserPremiumOnOtherChains(address _user) internal view returns (bool) {
-        for (uint256 i = 0; i < MAX_SUPPOERTED_CHAINS; i++) {
-            uint32 chainId = s_supportedChains[i];
-            if(s_isUserPremiumOnOtherChains[chainId][_user]) return true;
-        }
-        return false;
+        return s_isUserPremiumOnOtherChains[_user] > 0;
     }
 
     function _updateOtherChains(address _user, bool _isPremium) internal {
@@ -661,7 +660,7 @@ contract MonStaking is OApp, IERC721Receiver {
 
         uint32 chainId = _origin.srcEid; 
 
-        s_isUserPremiumOnOtherChains[chainId][user] = isPremium;
+        isPremium ? _enableChainPremium(chainId, user) : _disableChainPremium(chainId, user);
 
         if (!s_isUserPremium[user] && isPremium) s_isUserPremium[user] = isPremium;
 

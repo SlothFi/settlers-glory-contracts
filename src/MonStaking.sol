@@ -86,6 +86,7 @@ contract MonStaking is OApp, IERC721Receiver {
     uint256 public constant MAX_SUPPOERTED_CHAINS = 10;
     uint256 public constant TIME_LOCK_DURATION = 3 hours;
     uint256 public constant MAX_BATCH_NFT_WITHDRAW = 20;
+    uint8 public constant BITMAP_BOUND = type(uint8).max;
 
     uint256 public immutable i_crationTimestamp;
     uint256 public immutable i_premiumDuration;
@@ -578,6 +579,25 @@ contract MonStaking is OApp, IERC721Receiver {
 
     function _enforcePointDecimals(uint256 _points) internal pure returns (uint256) {
         return _points * POINTS_DECIMALS;
+    }
+
+    /// BITMAP FUNCTIONALITIES
+
+    function _enableChain(uint32 _chainId) internal {
+
+    }
+
+    function _getChainIndex(uint32 _chainId) internal pure returns(uint256){
+        return _chainId % BITMAP_BOUND;
+    }
+
+    function _getBitMask(uint256 _chainIndex) internal pure returns(uint256){
+        return 1 << _chainIndex;
+    }
+
+    // maybe useless
+    function _isIndexInBitmap(uint256 _chainIdIndex, uint256 _bitmap) internal pure returns(bool) {
+        return _bitmap >> _chainIdIndex != 0;
     }
 
     function _toggleNftDelegation(address _user, uint256 _tokenId, bool _isDelegated) internal {

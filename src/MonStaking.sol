@@ -15,6 +15,8 @@ import {LiquidStakedMonster} from "./LiquidStakedMonster.sol";
 
 // TODO - Implement bitmap for checking if user is premium on other chains 
 // TODO - Create LSToken in the constructor so we'll have its address here and it will have this address there
+// TODO - Move Access control lsToken here to make it more complete
+// TODO - enable batch setter for multipliers
 
 
 contract MonStaking is OApp, IERC721Receiver {
@@ -600,7 +602,7 @@ contract MonStaking is OApp, IERC721Receiver {
     }
 
     function _isChainPremium(uint256 _bitmap, uint32 _chainId) internal pure returns(bool){
-        return _bitmap >> _getChainIndex(_chainId) != 0;
+        return (_bitmap & _getBitmask(_getChainIndex(_chainId))) != 0;
     }
 
     function _toggleNftDelegation(address _user, uint256 _tokenId, bool _isDelegated) internal {

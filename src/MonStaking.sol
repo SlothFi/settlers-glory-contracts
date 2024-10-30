@@ -124,6 +124,9 @@ contract MonStaking is OApp, IERC721Receiver {
     /// @dev Throws if the array length is 0
     error MonStaking__InvalidIdArrayLength();
 
+    /// @dev Throws if the nft is not owned by the msg.sender
+    error MonStaking__NotNftOwner();
+
     /**
     * @notice Event emitted when the token base multiplier is changed
     * @param _newValue - The new value of the token base multiplier 
@@ -457,7 +460,10 @@ contract MonStaking is OApp, IERC721Receiver {
 
         s_userStakedTokenAmount[msg.sender] += _amount;
         
-        if (!s_isUserPremium[msg.sender] && block.timestamp <= i_endPremiumTimestamp) _updateOtherChains(msg.sender, true);
+        if (!s_isUserPremium[msg.sender] && block.timestamp <= i_endPremiumTimestamp) {
+            s_isUserPremium[msg.sender] = true;
+            _updateOtherChains(msg.sender, true);
+        }
 
         IERC20(i_monsterToken).safeTransferFrom(msg.sender, address(this), _amount);
 
@@ -482,7 +488,10 @@ contract MonStaking is OApp, IERC721Receiver {
         s_userNftAmount[msg.sender] += 1;
         s_nftOwner[_tokenId] = msg.sender;
 
-        if (!s_isUserPremium[msg.sender] && block.timestamp <= i_endPremiumTimestamp) _updateOtherChains(msg.sender, true);
+        if (!s_isUserPremium[msg.sender] && block.timestamp <= i_endPremiumTimestamp){
+            s_isUserPremium[msg.sender] = true;
+            _updateOtherChains(msg.sender, true);
+        }
 
         IERC721(i_nftToken).safeTransferFrom(msg.sender, address(this), _tokenId);
 
@@ -516,6 +525,8 @@ contract MonStaking is OApp, IERC721Receiver {
             _clearUserTimeInfo(msg.sender);
         }
 
+        IERC20(i_monsterToken).safeTransfer(msg.sender, _amount);
+
         LiquidStakedMonster(i_lsToken).burn(msg.sender, _amount);
 
         emit TokensUnstaked(msg.sender, _amount);
@@ -537,6 +548,7 @@ contract MonStaking is OApp, IERC721Receiver {
         if(_tokenId == 0 || _tokenId > i_nftMaxSupply) revert MonStaking__InvalidTokenId();
         if(userNftBalance == 0) revert MonStaking__ZeroAmount();
         if(userNftBalance == 1 && s_userStakedTokenAmount[msg.sender] == 0 && s_isUserPremium[msg.sender]) revert MonStaking__CannotTotallyUnstake();
+        if(s_nftOwner[_tokenId] != msg.sender) revert MonStaking__NotNftOwner();
 
         _updateUserState(msg.sender);
 
@@ -580,6 +592,8 @@ contract MonStaking is OApp, IERC721Receiver {
         for(uint256 i = 0; i < tokenIdsLength; ++i){
 
             uint256 tokenId = _tokenIds[i];
+
+            if(s_nftOwner[tokenId] != msg.sender) revert MonStaking__NotNftOwner();
 
             delete s_nftOwner[tokenId];
 
@@ -666,6 +680,7 @@ contract MonStaking is OApp, IERC721Receiver {
         IERC20(i_monsterToken).safeTransfer(msg.sender, userUnstakeRequest.tokenAmount);
 
         for (uint256 i = 0; i < tokenIdsLength; i++) {
+            if(s_nftOwner[_tokenIds[i]] != msg.sender) revert MonStaking__NotNftOwner();
             delete s_nftOwner[_tokenIds[i]];
             IERC721(i_nftToken).safeTransferFrom(address(this), msg.sender, _tokenIds[i]);
             _toggleNftDelegation(msg.sender, _tokenIds[i], false);
@@ -733,6 +748,11 @@ contract MonStaking is OApp, IERC721Receiver {
 
 
         _lzSend(_chainId, message, "", _fee, msg.sender);
+
+        if (!payInLzToken && msg.value > _fee.amount) {
+            (bool success, ) = msg.sender.call{value: msg.value - _fee.amount}("");
+            if (!success) revert MonStaking__TransferFailed();
+        } 
 
         emit NewChainPinged(_chainId, msg.sender);
     }
@@ -1128,6 +1148,11 @@ contract MonStaking is OApp, IERC721Receiver {
             totalNativeFeeUsed += fee.nativeFee;
 
             _lzSend(chainId, abi.encode(_user, _isPremium), "", fee, _user);
+        }
+
+        if(remainingValue > 0) {
+            (bool success, ) = _user.call{value: remainingValue}("");
+            if (!success) revert MonStaking__TransferFailed();
         }
 
         emit ChainsUpdated(supportedChains, _user, _isPremium);

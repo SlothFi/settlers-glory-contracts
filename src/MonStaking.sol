@@ -876,10 +876,6 @@ contract MonStaking is OApp, IERC721Receiver {
     /**
     * @notice It is used to be capable of receiving nfts
     * @dev It is called when safeTransferFrom is called on the NFT token
-    * @param _operator - The operator of the nft
-    * @param _from - The address from which the nft is transferred
-    * @param _tokenId - The id of the nft
-    * @param _data - The data that is sent
     */
     function onERC721Received(address, /*_operator*/ address, /*_from*/ uint256, /*_tokenId*/ bytes calldata /*_data*/ )
         external

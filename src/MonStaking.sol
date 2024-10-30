@@ -127,6 +127,9 @@ contract MonStaking is OApp, IERC721Receiver {
     /// @dev Throws if the nft is not owned by the msg.sender
     error MonStaking__NotNftOwner();
 
+    /// @dev Throws when a native transfer fails
+    error MonStaking__TransferFailed();
+
     /**
     * @notice Event emitted when the token base multiplier is changed
     * @param _newValue - The new value of the token base multiplier 
@@ -749,8 +752,8 @@ contract MonStaking is OApp, IERC721Receiver {
 
         _lzSend(_chainId, message, "", _fee, msg.sender);
 
-        if (!payInLzToken && msg.value > _fee.amount) {
-            (bool success, ) = msg.sender.call{value: msg.value - _fee.amount}("");
+        if (!payInLzToken && msg.value > _fee.nativeFee) {
+            (bool success, ) = msg.sender.call{value: msg.value - _fee.nativeFee}("");
             if (!success) revert MonStaking__TransferFailed();
         } 
 

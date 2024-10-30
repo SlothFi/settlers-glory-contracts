@@ -4,6 +4,7 @@ pragma solidity 0.8.24;
 
 import {OApp, Origin, MessagingFee} from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol"; // This needs to be changed to ReentrancyGuard when deploying on AVAX
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
@@ -22,7 +23,7 @@ import {LiquidStakedMonster} from "./LiquidStakedMonster.sol";
 * @dev It is the owner of the LiquidStakedMonster contract and is able to mint and burn tokens in that contract
 * @dev It implements IERC721Receiver to be able to receive NFTs
 */
-contract MonStaking is OApp, IERC721Receiver {
+contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient {
 
     using SafeERC20 for IERC20;
 
@@ -455,7 +456,7 @@ contract MonStaking is OApp, IERC721Receiver {
     * @param _amount - The amount of tokens to be staked
     * @dev It emits a TokensStaked event
     */
-    function stakeTokens(uint256 _amount) external payable {
+    function stakeTokens(uint256 _amount) external payable nonReentrant {
 
         if (_amount == 0) revert MonStaking__ZeroAmount();
 
@@ -482,7 +483,7 @@ contract MonStaking is OApp, IERC721Receiver {
     * @dev It emits a NftStaked event
     * @dev It enables as delegated of the nft the msg.sender
     */
-    function stakeNft(uint256 _tokenId) external payable {
+    function stakeNft(uint256 _tokenId) external payable nonReentrant {
 
         if(_tokenId == 0 || _tokenId > i_nftMaxSupply) revert MonStaking__InvalidTokenId();
 
@@ -512,7 +513,7 @@ contract MonStaking is OApp, IERC721Receiver {
     * @param _amount - The amount of tokens to be unstaked
     * @dev It emits a TokensUnstaked event
     */
-    function unstakeTokens(uint256 _amount) external {
+    function unstakeTokens(uint256 _amount) external nonReentrant {
 
         uint256 userTokenBalance = s_userStakedTokenAmount[msg.sender];
 
@@ -544,7 +545,7 @@ contract MonStaking is OApp, IERC721Receiver {
     * @dev It emits a NftStaked event
     * @dev It disables as delegated of the nft the msg.sender
     */
-    function unstakeNft(uint256 _tokenId) external {
+    function unstakeNft(uint256 _tokenId) external nonReentrant {
 
         uint256 userNftBalance = s_userNftAmount[msg.sender];
 
@@ -578,7 +579,7 @@ contract MonStaking is OApp, IERC721Receiver {
     * @dev It emits a NftBatchUnstaked event
     * @dev It disables as delegated of the nfts the msg.sender
     */
-    function batchUnstakeNft(uint256[] calldata _tokenIds) external {
+    function batchUnstakeNft(uint256[] calldata _tokenIds) external nonReentrant {
         uint256 tokenIdsLength = _tokenIds.length;
 
         if(tokenIdsLength == 0 || tokenIdsLength > MAX_BATCH_NFT_WITHDRAW) revert MonStaking__InvalidIdArrayLength();
@@ -618,7 +619,7 @@ contract MonStaking is OApp, IERC721Receiver {
     * @dev If user unstakes in chain A and loses premium he could still stake in chain B resulting premium if he does so before the interchain message arrives
     * @dev It emits a TotalUnstakeRequired event
     */
-    function requireUnstakeAll() external payable {
+    function requireUnstakeAll() external payable nonReentrant {
 
         uint256 userTokenBalance = s_userStakedTokenAmount[msg.sender];
         uint256 userNftBalance =  s_userNftAmount[msg.sender];
@@ -663,7 +664,7 @@ contract MonStaking is OApp, IERC721Receiver {
     * @dev It emits a UnstakedAssetsClaimed event
     * @dev The check on tokenIdsLength is made to prevent DOS if user has a very large amount of staked nfts
     */
-    function claimUnstakedAssets(uint256[] calldata _tokenIds) external ifTimelockAllows {
+    function claimUnstakedAssets(uint256[] calldata _tokenIds) external ifTimelockAllows nonReentrant {
 
         uint256 tokenIdsLength = _tokenIds.length;
 
@@ -736,7 +737,7 @@ contract MonStaking is OApp, IERC721Receiver {
     * @param _chainId - The chain id of the chain that is pinged
     * @dev It emits a NewChainPinged event
     */
-    function pingNewChainContract(uint32 _chainId) external payable {
+    function pingNewChainContract(uint32 _chainId) external payable nonReentrant {
 
         if (_chainId == 0) revert MonStaking__ZeroChainId();
         if (s_otherChainStakingContract[_chainId] == bytes32(0)) revert MonStaking__ChainNotSupported();

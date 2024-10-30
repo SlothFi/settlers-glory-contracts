@@ -2,6 +2,7 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+evmVersion = "cancun" # This needs to be changed when deploying on AVAX
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "@layerzerolabs/oapp-evm/=lib/devtools/packages/oapp-evm/",

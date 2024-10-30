@@ -345,6 +345,10 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient {
     /// @dev It is made to optimise read access in o(1)
     mapping(address user => uint256 bitmap) public s_isUserPremiumOnOtherChains;
 
+    /// @dev It is designed to make chain eids potential collisions over the BITMAP_BOUND cardinality possible
+    /// @dev If a collision happens this mapping will be updated
+    mapping(address user => mapping(uint256 bitmapChainIndex => uint256 collisions)) public s_userChainIndexCollisions;
+
     /// @dev It stores the user's premium state
     /// @dev It stays true if the user is premium in at least one chain
     mapping(address user => bool isPremium) public s_isUserPremium;
@@ -1051,7 +1055,13 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient {
     * @dev It then performs a bitwise OR operation to enable the premium status
     */
     function _enableChainPremium(uint32 _chainId, address _user) internal {
-        s_isUserPremiumOnOtherChains[_user] |= _getBitmask(_getChainIndex(_chainId));
+        
+        uint256 chainIndex = _getChainIndex(_chainId);
+
+        if (_isChainPremium(s_isUserPremiumOnOtherChains[_user], _chainId)) {
+            s_userChainIndexCollisions[_user][chainIndex]++;
+        }
+        s_isUserPremiumOnOtherChains[_user] |= _getBitmask(chainIndex);
     }
 
     /**
@@ -1063,7 +1073,14 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient {
     * @dev It then performs a bitwise AND operation on the reversed bitmask to disable the premium status
     */
     function _disableChainPremium(uint32 _chainId, address _user) internal {
-        s_isUserPremiumOnOtherChains[_user] &= ~(_getBitmask(_getChainIndex(_chainId)));
+
+        uint256 chainIndex = _getChainIndex(_chainId);
+
+        if (s_userChainIndexCollisions[_user][chainIndex] > 0){
+            s_userChainIndexCollisions[_user][chainIndex]--;
+        }else {
+            s_isUserPremiumOnOtherChains[_user] &= ~(_getBitmask(chainIndex));
+        }
     }
 
     /**

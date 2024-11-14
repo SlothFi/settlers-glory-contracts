@@ -10,11 +10,15 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+import {IMonStaking} from "./interfaces/IMonStaking.sol";
+import {IMonStakingErrors} from "./interfaces/errors/IMonStakingErrors.sol";
+import {IMonStakingEvents} from "./interfaces/events/IMonStakingEvents.sol";
+
 import {IMonERC721} from "./interfaces/IMonERC721.sol";
 import {IDelegateRegistry} from "./interfaces/IDelegateRegistry.sol";
+
 import {LiquidStakedMonster} from "./LiquidStakedMonster.sol";
-
-
 
 /**
 * @title MonStaking
@@ -23,7 +27,7 @@ import {LiquidStakedMonster} from "./LiquidStakedMonster.sol";
 * @dev It is the owner of the LiquidStakedMonster contract and is able to mint and burn tokens in that contract
 * @dev It implements IERC721Receiver to be able to receive NFTs
 */
-contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient {
+contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStaking, IMonStakingErrors, IMonStakingEvents  {
 
     using SafeERC20 for IERC20;
 
@@ -47,211 +51,22 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient {
         uint256 requestTimestamp;
     }
 
-    /// @dev Throws if the address is 0
-    error MonStaking__ZeroAddress();
-
-    /// @dev Throws if the amount is 0
-    error MonStaking__ZeroAmount();
-
-    /// @dev Throws if the chainId is 0
-    error MonStaking__ZeroChainId();
-
-    /// @dev Throws if the timelock has not passed when trying to claim a UserUnstakeRequest
-    error MonStaking__TimelockNotPassed();
-
-    /// @dev Throws if the token base multiplier is 0 or greater than the token premium multiplier
-    error MonStaking__InvalidTokenBaseMultiplier();
-
-    /// @dev Throws if the token premium multiplier is 0 or lower than the token base multiplier
-    error MonStaking__InvalidTokenPremiumMultiplier();
-
-    /// @dev Throws if the NFT base multiplier is 0 or greater than the NFT premium multiplier
-    error MonStaking__InvalidNftBaseMultiplier();
-
-    /// @dev Throws if the NFT premium multiplier is 0 or lower than the NFT base multiplier
-    error MonStaking__InvalidNftPremiumMultiplier();
-
-    /// @dev Throws if the enum given to the setter is not included among the Multipliers
-    error MonStaking__InvalidMultiplierType();
-
-    /// @dev Throws if the token decimals are 0
-    error MonStaking__InvalidTokenDecimals();
-
-    /// @dev Throws if the token id is 0 or greater than the max supply
-    error MonStaking__InvalidTokenId();
-
-    /// @dev Throws if msg.sender is not the LiquidStakedMonster contract
-    error MonStaking__NotLSMContract();
-
-    /// @dev Throws if the chain is not supported
-    error MonStaking__ChainNotSupported();
-
-    /// @dev Throws if trying to ping a new chain where the user is already premium
-    error MonStaking__UserAlreadyPremium();
-
-    /// @dev Throws if the user tries to ping a new chain if not premium
-    error MonStaking__UserNotPremium();
-
-    /// @dev Throws if user tries to perform a interchain communication and msg.value is not sufficient
-    error MonStaking__NotEnoughNativeTokens();
-
-    /// @dev Throws if user ties to unstake an amount which is bigger than his balance
-    error MonStaking__NotEnoughMonsterTokens();
-
-    /// @dev Throws if a premium user tries to totally unstake without passing from the designated function - requireUnstakeAll()
-    error MonStaking__CannotTotallyUnstake();
-
-    /// @dev Throws if user tries to batch withdraw more than 20 nfts at one time
-    error MonStaking__TokenIdArrayTooLong();
-
-    /// @dev It is thrown if the owner tries to renounce ownership
-    error MonStaking__OwnershipCannotBeRenounced();
-
-    /// @dev It is thrown if the owner tries to transfer ownership in one step
-    error MonStaking__OwnershipCannotBeDirectlyTransferred();
-
-    /// @dev Throws if the msg.sender is not the proposed owner
-    error MonStaking__NotProposedOwner();
-
-    /// @dev Throws if the owner tries to add more than 10 chains
-    error MonStaking__SupportedChainLimitReached();
-
-    /// @dev Throws if in batchSetPeers the chain id length is not equal to the address length
-    error MonStaking__PeersMismatch();
-
-    /// @dev Throws if the array length is 0
-    error MonStaking__ArrayLengthCannotBeZero();
-
-    /// @dev Throws if the array length is 0
-    error MonStaking__InvalidIdArrayLength();
-
-    /// @dev Throws if the nft is not owned by the msg.sender
-    error MonStaking__NotNftOwner();
-
-    /// @dev Throws when a native transfer fails
-    error MonStaking__TransferFailed();
-
-    /**
-    * @notice Event emitted when the token base multiplier is changed
-    * @param _newValue - The new value of the token base multiplier 
-    */
-    event TokenBaseMultiplierChanged(uint256 indexed _newValue);
-    /**
-    * @notice Event emitted when the token premium multiplier is changed
-    * @param _newValue - The new value of the token premium multiplier 
-    */
-    event TokenPremiumMultiplierChanged(uint256 indexed _newValue);
-    /**
-    * @notice Event emitted when the NFT base multiplier is changed
-    * @param _newValue - The new value of the NFT base multiplier 
-    */
-    event NftBaseMultiplierChanged(uint256 indexed _newValue);
-    /**
-    * @notice Event emitted when the NFT premium multiplier is changed
-    * @param _newValue - The new value of the NFT premium multiplier 
-    */
-    event NftPremiumMultiplierChanged(uint256 indexed _newValue);
-    /**
-    * @notice Event emitted when a new chain is pinged to update a premium user state
-    * @param _chainId - The chain id that is pinged
-    * @param _user - The user that is being updated
-    */
-    event NewChainPinged(uint32 indexed _chainId, address indexed _user);
-    /**
-    * @notice Event emitted when the staking balance is updated
-    * @dev This happens when a user buys something with LiquidStakedMonster tokens
-    * @param _from - The address from which the amount is taken
-    * @param _to - The address to which the amount is added
-    * @param _amount - The amount that is transferred
-    */
-    event StakingBalanceUpdated(address indexed _from, address indexed _to, uint256 indexed _amount);
-    /**
-    * @notice Event emitted when tokens are staked
-    * @param _user - The user that is staking the tokens
-    * @param _amount - The amount of tokens that are staked
-    */
-    event TokensStaked(address indexed _user, uint256 indexed _amount);
-    /**
-    * @notice Event emitted when tokens are unstaked
-    * @param _user - The user that is unstaking the tokens
-    * @param _amount - The amount of tokens that are unstaked
-    */
-    event TokensUnstaked(address indexed _user, uint256 indexed _amount);
-    /**
-    * @notice Event emitted when an NFT is staked
-    * @param _user - The user that is staking the NFT
-    * @param _tokenId - The id of the NFT that is staked
-    */
-    event NftStaked(address indexed _user, uint256 indexed _tokenId);
-    /**
-    * @notice Event emitted when an NFT is unstaked
-    * @param _user - The user that is unstaking the NFT
-    * @param _tokenId - The id of the NFT that is unstaked
-    */
-    event NftUnstaked(address indexed _user, uint256 indexed _tokenId);
-    /**
-    * @notice Event emitted when the premium state of a user is updated in other chains
-    * @param _chainIds - The chain ids that are updated
-    * @param _user - The user that is being updated
-    * @param _isPremium - The new premium state of the user
-    */
-    event ChainsUpdated(uint32[] indexed _chainIds, address indexed _user, bool indexed _isPremium);
-    /**
-    * @notice Event emitted when other chains call the contract to update the premium state of a user
-    * @param _chainId - The chain id that is calling
-    * @param _user - The user that is being updated
-    * @param _isPremium - The new premium state of the user
-    */
-    event UserChainPremimUpdated(uint32 indexed _chainId, address indexed _user, bool indexed _isPremium);
-    /**
-    * @notice Event emitted when the points of a user are synced
-    * @param _user - The user that is being updated
-    * @param _totalPoints - The total points of the user
-    */
-    event PointsSynced(address indexed _user, uint256 indexed _totalPoints);
-    /**
-    * @notice Event emitted when a premium user requires a total unstake
-    * @param _user - The user that is requiring the total unstake
-    * @param _tokenAmount - The amount of tokens that are required to be unstaked
-    * @param _nftAmount - The amount of NFTs that are required to be unstaked
-    */
-    event TotalUnstakeRequired(address indexed _user, uint256 indexed _tokenAmount, uint256 indexed _nftAmount);
-    /**
-    * @notice Event emitted when the user claims the unstaked assets
-    * @param _user - The user that is claiming the assets
-    * @param _tokenAmount - The amount of tokens that are claimed
-    * @param _tokenIds - The ids of the NFTs that are claimed
-    */
-    event UnstakedAssetsClaimed(address indexed _user, uint256 indexed _tokenAmount, uint256[] indexed _tokenIds);
-    /**
-    * @notice Event emitted when the new owner is proposed
-    * @param _newOwner - The address of the new owner
-    */
-    event NewOwnerProposed(address indexed _newOwner);
-    /**
-    * @notice Event emitted when the ownership is claimed
-    * @param _newOwner - The address of the new owner
-    * @param _oldOwner - The address of the old owner
-    */
-    event OwnershipClaimed(address indexed _newOwner, address indexed _oldOwner);
-    /**
-    * @notice Event emitted when multiple peers are enabled
-    * @param _chainIds - The chain ids that are enabled
-    * @param _peers - The peers that are enabled
-    */
-    event MultiplePeersEnabled(uint32[] indexed _chainIds, bytes32[] indexed _peers);
-    /**
-    * @notice Event emitted when a chain is removed
-    * @param _chainId - The chain id that is removed
-    */
-    event ChainRemoved(uint32 indexed _chainId);
-    /**
-    * @notice Event emitted when a user batch unstakes NFTs
-    * @param _tokenIds - The ids of the NFTs that are unstaked
-    * @param _user - The user that is unstaking the NFTs
-    */
-    event NftBatchUnstaked(uint256[] indexed _tokenIds, address indexed _user);
-
+    struct Config {
+        address endpoint;
+        address delegated;
+        uint256 premiumDuration;
+        address monsterToken;
+        address nftToken;
+        uint256 tokenBaseMultiplier;
+        uint256 tokenPremiumMultiplier;
+        uint256 nftBaseMultiplier;
+        uint256 nftPremiumMultiplier;
+        address delegateRegistry;
+        address marketPlace;
+        address operatorRole;
+        address defaultAdmin;
+    }
+    
     /// @dev Basis points - 100% = 10_000
     uint256 public constant BPS = 10_000;
 
@@ -274,7 +89,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient {
     uint8 public constant BITMAP_BOUND = type(uint8).max;
 
     /// @dev It stores the time in which the contract has been created
-    uint256 public immutable i_crationTimestamp;
+    uint256 public immutable i_creationTimestamp;
 
     /// @dev It stores the duration of the premium staking window - if users stake after this time they will be base
     uint256 public immutable i_premiumDuration;
@@ -392,65 +207,40 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient {
     /**
     * @notice Construcor - It initializes the contract
     * @dev It deploys the LiquidStakedMonster contract and it is its owner
-    * @param _endpoint - The endpoint of the LayerZero protocol
-    * @param _delegated - The address able to set new peers - it is the owner of the contract
-    * @param _premiumDuration - The duration of the premium staking window
-    * @param _monsterToken - The address of the MonsterToken
-    * @param _nftToken - The address of the NFT token
-    * @param _tokenBaseMultiplier - The token base multiplier
-    * @param _tokenPremiumMultiplier - The token premium multiplier
-    * @param _nftBaseMultiplier - The NFT base multiplier
-    * @param _nftPremiumMultiplier - The NFT premium multiplier
-    * @param _delegateRegistry - The address of the DelegateRegistry
-    * @param _marketPlace - The address of the market place - it is needed because will be passed to LiquidStakingMonster
-    * @param _operatorRole - The role of the operator of the LiquidStakingMonster
-    * @param _defaultAdmin - The default admin of the LiquidStakingMonster
     */
-    constructor(
-        address _endpoint,
-        address _delegated,
-        uint256 _premiumDuration,
-        address _monsterToken,
-        address _nftToken,
-        uint256 _tokenBaseMultiplier,
-        uint256 _tokenPremiumMultiplier,
-        uint256 _nftBaseMultiplier,
-        uint256 _nftPremiumMultiplier,
-        address _delegateRegistry,
-        address _marketPlace,
-        address _operatorRole,
-        address _defaultAdmin
-    ) OApp(_endpoint, _delegated) Ownable(_delegated) {
+    constructor(Config memory config) OApp(config.endpoint, config.delegated) Ownable(config.delegated) 
+    {
         if (
-            _monsterToken == address(0) ||  _nftToken == address(0)
-                || _delegateRegistry == address(0)
+            config.monsterToken == address(0) || 
+            config.nftToken == address(0) ||
+            config.delegateRegistry == address(0)
         ) revert MonStaking__ZeroAddress();
-        if (_premiumDuration == 0) revert MonStaking__ZeroAmount();
-        if (_tokenBaseMultiplier == 0 || _tokenBaseMultiplier >= _tokenPremiumMultiplier) {
+        if (config.premiumDuration == 0) revert MonStaking__ZeroAmount();
+        if (config.tokenBaseMultiplier == 0 || config.tokenBaseMultiplier >= config.tokenPremiumMultiplier) {
             revert MonStaking__InvalidTokenBaseMultiplier();
         }
-        if (_tokenPremiumMultiplier == 0) revert MonStaking__InvalidTokenPremiumMultiplier();
-        if (_nftBaseMultiplier == 0 || _nftBaseMultiplier >= _nftPremiumMultiplier) {
+        if (config.tokenPremiumMultiplier == 0) revert MonStaking__InvalidTokenPremiumMultiplier();
+        if (config.nftBaseMultiplier == 0 || config.nftBaseMultiplier >= config.nftPremiumMultiplier) {
             revert MonStaking__InvalidNftBaseMultiplier();
         }
-        if (_nftPremiumMultiplier == 0) revert MonStaking__InvalidNftPremiumMultiplier();
+        if (config.nftPremiumMultiplier == 0) revert MonStaking__InvalidNftPremiumMultiplier();
 
-        i_crationTimestamp = block.timestamp;
-        i_premiumDuration = _premiumDuration;
-        i_endPremiumTimestamp = i_crationTimestamp + i_premiumDuration;
-        i_monsterToken = _monsterToken;
-        i_monsterTokenDecimals = IERC20Metadata(_monsterToken).decimals();
+        i_creationTimestamp = block.timestamp;
+        i_premiumDuration = config.premiumDuration;
+        i_endPremiumTimestamp = i_creationTimestamp + config.premiumDuration;
+        i_monsterToken = config.monsterToken;
+        i_monsterTokenDecimals = IERC20Metadata(config.monsterToken).decimals();
         if (i_monsterTokenDecimals == 0) revert MonStaking__InvalidTokenDecimals();
-        i_nftToken = _nftToken;
-        i_nftMaxSupply = IMonERC721(_nftToken).maxSupply();
-        i_delegateRegistry = IDelegateRegistry(_delegateRegistry);
+        i_nftToken = config.nftToken;
+        i_nftMaxSupply = IMonERC721(config.nftToken).maxSupply();
+        i_delegateRegistry = IDelegateRegistry(config.delegateRegistry);
 
-        s_tokenBaseMultiplier = _tokenBaseMultiplier;
-        s_tokenPremiumMultiplier = _tokenPremiumMultiplier;
-        s_nftBaseMultiplier = _nftBaseMultiplier;
-        s_nftPremiumMultiplier = _nftPremiumMultiplier;
+        s_tokenBaseMultiplier = config.tokenBaseMultiplier;
+        s_tokenPremiumMultiplier = config.tokenPremiumMultiplier;
+        s_nftBaseMultiplier = config.nftBaseMultiplier;
+        s_nftPremiumMultiplier = config.nftPremiumMultiplier;
 
-        i_lsToken = address(new LiquidStakedMonster(_operatorRole, _defaultAdmin, _marketPlace));
+        i_lsToken = address(new LiquidStakedMonster(config.operatorRole, config.defaultAdmin, config.marketPlace));
     }
 
     /**

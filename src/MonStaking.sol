@@ -419,8 +419,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         uint256 userNftBalance =  s_userNftAmount[msg.sender];
 
         if(!s_isUserPremium[msg.sender]) revert MonStaking__UserNotPremium();
-        if(userTokenBalance == 0 && userNftBalance == 0) revert MonStaking__ZeroAmount();
-
+        if(userTokenBalance == 0 && userNftBalance == 0) revert MonStaking__ZeroAmount();//@audit-issue can't hit this because if a user is premium we cant unstake all the funds
 
         _updateUserState(msg.sender);
 

@@ -58,7 +58,7 @@ contract ConstructorTests is MonStakingTestBase {
             tokenPremiumMultiplier: tokenPremiumMultiplier,
             nftBaseMultiplier: nftBaseMultiplier,
             nftPremiumMultiplier: nftPremiumMultiplier,
-            delegateRegistry: address(0x1), // Replace with actual delegate registry address if needed
+            delegateRegistry: address(0x1),
             marketPlace: marketPlace,
             operatorRole: operatorRole,
             defaultAdmin: defaultAdminRole
@@ -79,7 +79,7 @@ contract ConstructorTests is MonStakingTestBase {
             tokenPremiumMultiplier: tokenPremiumMultiplier,
             nftBaseMultiplier: nftBaseMultiplier,
             nftPremiumMultiplier: nftPremiumMultiplier,
-            delegateRegistry: address(0x1), // Replace with actual delegate registry address if needed
+            delegateRegistry: address(0x1), 
             marketPlace: marketPlace,
             operatorRole: operatorRole,
             defaultAdmin: defaultAdminRole
@@ -121,7 +121,7 @@ contract ConstructorTests is MonStakingTestBase {
             tokenPremiumMultiplier: tokenPremiumMultiplier,
             nftBaseMultiplier: nftBaseMultiplier,
             nftPremiumMultiplier: nftPremiumMultiplier,
-            delegateRegistry: address(0x1), // Replace with actual delegate registry address if needed
+            delegateRegistry: address(0x1), 
             marketPlace: marketPlace,
             operatorRole: operatorRole,
             defaultAdmin: defaultAdminRole
@@ -142,7 +142,7 @@ contract ConstructorTests is MonStakingTestBase {
             tokenPremiumMultiplier: tokenPremiumMultiplier,
             nftBaseMultiplier: nftBaseMultiplier,
             nftPremiumMultiplier: nftPremiumMultiplier,
-            delegateRegistry: address(0x1), // Replace with actual delegate registry address if needed
+            delegateRegistry: address(0x1), 
             marketPlace: marketPlace,
             operatorRole: operatorRole,
             defaultAdmin: defaultAdminRole
@@ -163,7 +163,7 @@ contract ConstructorTests is MonStakingTestBase {
             tokenPremiumMultiplier: 0,
             nftBaseMultiplier: nftBaseMultiplier,
             nftPremiumMultiplier: nftPremiumMultiplier,
-            delegateRegistry: address(0x1), // Replace with actual delegate registry address if needed
+            delegateRegistry: address(0x1), 
             marketPlace: marketPlace,
             operatorRole: operatorRole,
             defaultAdmin: defaultAdminRole
@@ -184,7 +184,7 @@ contract ConstructorTests is MonStakingTestBase {
             tokenPremiumMultiplier: tokenPremiumMultiplier,
             nftBaseMultiplier: 0,
             nftPremiumMultiplier: nftPremiumMultiplier,
-            delegateRegistry: address(0x1), // Replace with actual delegate registry address if needed
+            delegateRegistry: address(0x1), 
             marketPlace: marketPlace,
             operatorRole: operatorRole,
             defaultAdmin: defaultAdminRole
@@ -205,7 +205,7 @@ contract ConstructorTests is MonStakingTestBase {
             tokenPremiumMultiplier: tokenPremiumMultiplier,
             nftBaseMultiplier: nftBaseMultiplier,
             nftPremiumMultiplier: 0,
-            delegateRegistry: address(0x1), // Replace with actual delegate registry address if needed
+            delegateRegistry: address(0x1), 
             marketPlace: marketPlace,
             operatorRole: operatorRole,
             defaultAdmin: defaultAdminRole
@@ -230,7 +230,7 @@ contract ConstructorTests is MonStakingTestBase {
             tokenPremiumMultiplier: tokenPremiumMultiplier,
             nftBaseMultiplier: nftBaseMultiplier,
             nftPremiumMultiplier: nftPremiumMultiplier,
-            delegateRegistry: address(0x1), // Replace with actual delegate registry address if needed
+            delegateRegistry: address(0x1), 
             marketPlace: marketPlace,
             operatorRole: operatorRole,
             defaultAdmin: defaultAdminRole

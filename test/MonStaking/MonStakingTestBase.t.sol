@@ -9,6 +9,7 @@ import {MonStaking} from "../../src/MonStaking.sol";
 import {LiquidStakedMonster} from "../../src/LiquidStakedMonster.sol";
 
 import {MockLayerZeroEndpointV2} from "./helper/mockLayerZeroEndpoint.t.sol";
+import {MockDelegateRegistry} from "./helper/mockDelegateRegistry.t.sol";
 
 /**
  * @title MonStakingTestBase
@@ -21,23 +22,24 @@ contract MonStakingTestBase is Test {
     MonERC721 public monERC721;
     MonStaking public monStaking;
     MockLayerZeroEndpointV2 public mockLayerZeroEndpoint;
+    MockDelegateRegistry public mockDelegateRegistry;
 
     address public monsterTokenAddress;
     address public monERC721Address;
     address public liquidStakedMonsterAddress;
+    address public delegateRegistry;
 
     address public endpoint;
     
     address public user = makeAddr("user");
     address public delegated = makeAddr("delegated");
     address public marketPlace = makeAddr("marketPlace");
-    address public owner = makeAddr("owner");
+    address public owner = delegated;
     address public fundsWallet = makeAddr("fundsWallet");
     
     address public defaultAdminRole = makeAddr("defaultAdminRole");
     address public operatorRole = makeAddr("operatorRole");
 
-    address public delegateRegistry = makeAddr("delegateRegistry");
 
     uint256 public premiumDuration = 100;
     uint256 public tokenBaseMultiplier = 1;
@@ -58,6 +60,9 @@ contract MonStakingTestBase is Test {
 
         mockLayerZeroEndpoint = new MockLayerZeroEndpointV2();
         endpoint = address(mockLayerZeroEndpoint);
+
+        mockDelegateRegistry = new MockDelegateRegistry();
+        delegateRegistry = address(mockDelegateRegistry);
 
         // Deploy MonERC721
         monERC721 = new MonERC721(
@@ -96,9 +101,9 @@ contract MonStakingTestBase is Test {
         liquidStakedMonster = LiquidStakedMonster(liquidStakedMonsterAddress);
 
         // fund the user with some tokens
-        monsterToken.mint(user, 1000 * 10 ** 18);
+        monsterToken.mint(user, 10000 ether);
 
         // fund the user with eth
-        vm.deal(user, 1000 * 10 ** 18);
+        vm.deal(user, 1000 ether);
     }
 }

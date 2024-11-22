@@ -75,24 +75,6 @@ contract OwnerTests is MonStakingTestBase {
         vm.stopPrank();
     }
 
-    // function testRemoveSupportedChainSuccess() public {
-    //     uint32[] memory chainIds = new uint32[](2);
-    //     chainIds[0] = 1;
-    //     chainIds[1] = 2;
-
-    //     bytes32[] memory peers = new bytes32[](2);
-    //     peers[0] = keccak256(abi.encodePacked("peer1"));
-    //     peers[1] = keccak256(abi.encodePacked("peer2"));
-
-    //     vm.startPrank(owner);
-    //     monStaking.batchSetPeers(chainIds, peers);
-    //     monStaking.removeSupportedChain(chainIds[0]);
-    //     vm.stopPrank();
-
-    //     // Verify chain is removed
-    //     assertEq(monStaking.s_otherChainStakingContract(chainIds[0]), bytes32(0));
-    // }
-
     function testRemoveSupportedChainNotOwner() public {
         uint32 chainId = 1;
 
@@ -281,13 +263,54 @@ contract OwnerTests is MonStakingTestBase {
         vm.stopPrank();
     }
     
+    // hard to get infalid enum error because it errors before out of other stuff
     function testSetMultiplierInvalidMultiplierType() public {
         uint256 newValue = 1;
-    
+        
         vm.startPrank(owner);
         // vm.expectRevert(IMonStakingErrors.MonStaking__InvalidMultiplierType.selector);
         vm.expectRevert();
         monStaking.setMultiplier(MonStaking.Multipliers(uint256(4)), newValue); // Invalid enum value
+        vm.stopPrank();
+    }
+
+    // test function setPeer
+
+    function testSetPeerSuccess() public {
+        uint32 eid = 1;
+        bytes32 peer = keccak256(abi.encodePacked("peer"));
+    
+        vm.startPrank(owner);
+        monStaking.setPeer(eid, peer);
+        vm.stopPrank();
+    
+        // Verify the peer is set
+        assertEq(monStaking.s_otherChainStakingContract(eid), peer);
+        assertEq(monStaking.s_supportedChains(0), eid);
+    }
+    
+    function testSetPeerUpdatePeer() public {
+        uint32 eid = 1;
+        bytes32 peer1 = keccak256(abi.encodePacked("peer1"));
+        bytes32 peer2 = keccak256(abi.encodePacked("peer2"));
+    
+        vm.startPrank(owner);
+        monStaking.setPeer(eid, peer1);
+        monStaking.setPeer(eid, peer2);
+        vm.stopPrank();
+    
+        // Verify the peer is updated
+        assertEq(monStaking.s_otherChainStakingContract(eid), peer2);
+        assertEq(monStaking.s_supportedChains(0), eid);
+    }
+    
+    function testSetPeerNotOwner() public {
+        uint32 eid = 1;
+        bytes32 peer = keccak256(abi.encodePacked("peer"));
+    
+        vm.startPrank(user);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user));
+        monStaking.setPeer(eid, peer);
         vm.stopPrank();
     }
 }

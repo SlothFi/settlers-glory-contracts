@@ -49,8 +49,8 @@ contract mintAndBurnTests is LSMTestBase {
         uint256 amount = 100 * 10 ** 18;
         address to = makeAddr("recipient");
 
-        // vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, controllerRole, keccak256("CONTROLLER_ROLE")));
-        vm.expectRevert();
+        vm.startPrank(nonControllerRole);
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonControllerRole, liquidStakedMonster.CONTROLLER_ROLE()));
         liquidStakedMonster.mint(to, amount);
     }
 
@@ -90,12 +90,10 @@ contract mintAndBurnTests is LSMTestBase {
         address from = makeAddr("holder");
 
         _mintLSMTokens(from, amount);
-
-        // vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, controllerRole, keccak256("CONTROLLER_ROLE")));
-        vm.expectRevert();
+        
         vm.startPrank(nonControllerRole);
+        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, nonControllerRole, liquidStakedMonster.CONTROLLER_ROLE()));    
         liquidStakedMonster.burn(from, amount);
-        vm.stopPrank();
     }
 
     function testMintToMarketplace() public {

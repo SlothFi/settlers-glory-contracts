@@ -3,6 +3,8 @@
 pragma solidity 0.8.24;
 
 import {OApp, Origin, MessagingFee} from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
+import {OptionsBuilder} from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
+
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol"; // This needs to be changed to ReentrancyGuard when deploying on AVAX
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -28,6 +30,7 @@ import {LiquidStakedMonster} from "./LiquidStakedMonster.sol";
 * @dev It implements IERC721Receiver to be able to receive NFTs
 */
 contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStaking, IMonStakingErrors, IMonStakingEvents  {
+    using OptionsBuilder for bytes;
 
     using SafeERC20 for IERC20;
 
@@ -288,7 +291,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
 
         if (!s_isUserPremium[msg.sender] && block.timestamp <= i_endPremiumTimestamp){
             s_isUserPremium[msg.sender] = true;
-            _updateOtherChains(msg.sender, true);
+            _updateOtherChains(msg.sender, true);//@audit-issue this will revert for more than 2 chains because of how lzSend expects msg.value = nativeFee
         }
 
         IERC721(i_nftToken).safeTransferFrom(msg.sender, address(this), _tokenId);
@@ -419,7 +422,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         uint256 userNftBalance =  s_userNftAmount[msg.sender];
 
         if(!s_isUserPremium[msg.sender]) revert MonStaking__UserNotPremium();
-        if(userTokenBalance == 0 && userNftBalance == 0) revert MonStaking__ZeroAmount();//@audit-issue can't hit this because if a user is premium we cant unstake all the funds
+        if(userTokenBalance == 0 && userNftBalance == 0) revert MonStaking__ZeroAmount();
 
         _updateUserState(msg.sender);
 
@@ -509,7 +512,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
 
 
         if (s_userStakedTokenAmount[_from] == 0 && s_userNftAmount[_from] == 0) {
-            _clearUserTimeInfo(_from);
+            _clearUserTimeInfo(_from);//@audit-info what's the purpose of this function
 
             if(s_isUserPremium[_from]) {
                 _updateOtherChains(_from, false);
@@ -541,12 +544,13 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
 
         bool payInLzToken = msg.value == 0;
 
-        MessagingFee memory _fee = _quote(_chainId, message, "", payInLzToken);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
 
+        MessagingFee memory _fee = _quote(_chainId, message, options, payInLzToken);
 
-        _lzSend(_chainId, message, "", _fee, msg.sender);
+        _lzSend(_chainId, message, options, _fee, msg.sender);
 
-        if (!payInLzToken && msg.value > _fee.nativeFee) {
+        if (!payInLzToken && msg.value > _fee.nativeFee) {//@audit-issue will never be hit , because it will revert is lzSend because of _payNative check
             (bool success, ) = msg.sender.call{value: msg.value - _fee.nativeFee}("");
             if (!success) revert MonStaking__TransferFailed();
         } 
@@ -929,7 +933,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
     * @dev It is used when a user is totally unstaking or is become premium when staking
     * @dev It emits a ChainsUpdated event
     */
-    function _updateOtherChains(address _user, bool _isPremium) internal {
+    function _updateOtherChains(address _user, bool _isPremium) internal {//@audit-issue this will fail for more than 2 chains because lzSend check
 
         uint256 chainsLength = s_supportedChains.length;
 
@@ -938,26 +942,29 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
             supportedChains[i] = s_supportedChains[i];
         }
 
+        //@audit-issue remove this part and only leave the next loop
+        MessagingFee memory totalFee = _batchQuote(supportedChains, abi.encode(_user, _isPremium), "", msg.value <= 0);//@audit-issue in testing even paying in lzTokens needs eth, check fork 
 
-        MessagingFee memory totalFee = _batchQuote(supportedChains, abi.encode(_user, _isPremium), "", msg.value <= 0);
-
-        if(msg.value > 0 && msg.value < totalFee.nativeFee) revert MonStaking__NotEnoughNativeTokens();
+        if(msg.value > 0 && msg.value < totalFee.nativeFee) revert MonStaking__NotEnoughNativeTokens(totalFee.nativeFee);
 
         uint256 totalNativeFeeUsed = 0;
         uint256 remainingValue = msg.value;
 
         for (uint256 i = 0; i < chainsLength; i++) {
             uint32 chainId = supportedChains[i];
-            MessagingFee memory fee = _quote(chainId, abi.encode(_user, _isPremium), "", msg.value <= 0);
+
+            bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+
+            MessagingFee memory fee = _quote(chainId, abi.encode(_user, _isPremium), options, msg.value <= 0);
 
             if(msg.value > 0) {
-                if(remainingValue < fee.nativeFee) revert MonStaking__NotEnoughNativeTokens();
+                if(remainingValue < fee.nativeFee) revert MonStaking__NotEnoughNativeTokens(fee.nativeFee);//@audit-issue redundant code will never be hit unless _quote changes from the fist and second call , basically dead code remove the first one
                 remainingValue -= fee.nativeFee;
             }
 
             totalNativeFeeUsed += fee.nativeFee;
 
-            _lzSend(chainId, abi.encode(_user, _isPremium), "", fee, _user);
+            _lzSend(chainId, abi.encode(_user, _isPremium), options, fee, _user);
         }
 
         if(remainingValue > 0) {
@@ -1031,5 +1038,15 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         }
 
         super._setPeer(_eid, _peer);
+    }
+
+    // added for tests
+
+    function quote(uint32 _chainId, bytes calldata _message, bytes calldata _extraSendOptions, bool _payInLzToken) external view returns (MessagingFee memory) {
+        return _quote(_chainId, _message, _extraSendOptions, _payInLzToken);
+    }
+
+    function isChainPremium(uint256 _bitmap, uint32 _chainId) public pure returns(bool){
+        return (_bitmap & _getBitmask(_getChainIndex(_chainId))) != 0;
     }
 }

@@ -8,6 +8,8 @@ import {MockMonsterToken} from "../../src/mocks/MockMonsterToken.sol";
 import {MonStaking} from "../../src/MonStaking.sol";
 import {LiquidStakedMonster} from "../../src/LiquidStakedMonster.sol";
 
+import {DelegateRegistry} from "@delegate_registry/contracts/DelegateRegistry.sol";
+
 import {MockLayerZeroEndpointV2} from "./helper/mockLayerZeroEndpoint.t.sol";
 import {MockDelegateRegistry} from "./helper/mockDelegateRegistry.t.sol";
 
@@ -22,7 +24,9 @@ contract MonStakingTestBase is Test {
     MonERC721 public monERC721;
     MonStaking public monStaking;
     MockLayerZeroEndpointV2 public mockLayerZeroEndpoint;
-    MockDelegateRegistry public mockDelegateRegistry;
+
+    // real delegate registry
+    DelegateRegistry public delegateRegistryContract;
 
     address public monsterTokenAddress;
     address public monERC721Address;
@@ -61,8 +65,8 @@ contract MonStakingTestBase is Test {
         mockLayerZeroEndpoint = new MockLayerZeroEndpointV2();
         endpoint = address(mockLayerZeroEndpoint);
 
-        mockDelegateRegistry = new MockDelegateRegistry();
-        delegateRegistry = address(mockDelegateRegistry);
+        delegateRegistryContract = new DelegateRegistry();
+        delegateRegistry = address(delegateRegistryContract);
 
         // Deploy MonERC721
         monERC721 = new MonERC721(

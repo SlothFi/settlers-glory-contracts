@@ -50,7 +50,7 @@ interface IMonStakingErrors {
     error MonStaking__UserNotPremium();
 
     /// @dev Throws if user tries to perform a interchain communication and msg.value is not sufficient
-    error MonStaking__NotEnoughNativeTokens();
+    error MonStaking__NotEnoughNativeTokens(uint256);
 
     /// @dev Throws if user ties to unstake an amount which is bigger than his balance
     error MonStaking__NotEnoughMonsterTokens();

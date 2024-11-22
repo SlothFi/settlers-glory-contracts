@@ -349,22 +349,6 @@ contract UnstakingTests is MonStakingTestBase {
         vm.stopPrank();
     }
     
-    // couldn't hit the check because we need to be premium and unstake everything
-    // function testRequireUnstakeAllNoStakedAssets() public {
-    //     vm.startPrank(user);
-    
-    //     // Stake tokens to make user premium
-    //     _stakeTokensPremium(1000 * 10 ** 18);
-    
-    //     // Unstake tokens
-    //     monStaking.unstakeTokens(1000 * 10 ** 18 - 1);
-    
-    //     // Attempt to require total unstake with no staked assets
-    //     vm.expectRevert(IMonStakingErrors.MonStaking__ZeroAmount.selector);
-    //     monStaking.requireUnstakeAll();
-    //     vm.stopPrank();
-    // }
-    
     function testRequireUnstakeAllUpdateExistingRequest() public {
         uint256 tokenAmount = 1000 * 10 ** 18;
         uint256 tokenId = 1;
@@ -520,17 +504,6 @@ contract UnstakingTests is MonStakingTestBase {
         monStaking.claimUnstakedAssets(tokenIds);
         vm.stopPrank();
     }
-    
-    // function testClaimUnstakedAssetsNoUnstakedAssets() public {
-    //     uint256[] memory tokenIds = new uint256[](1);
-    //     tokenIds[0] = 1;
-    
-    //     vm.startPrank(user);
-    
-    //     vm.expectRevert(IMonStakingErrors.MonStaking__ZeroAmount.selector);
-    //     monStaking.claimUnstakedAssets(tokenIds);
-    //     vm.stopPrank();
-    // }
 
     // Helper functions
 

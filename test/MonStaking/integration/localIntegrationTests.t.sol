@@ -31,7 +31,7 @@ contract LocalIntegrationTests is MonStakingTestBaseIntegration {
     function testPingNewChainContractSuccess() public {
         bytes memory message = abi.encode(user, true);
 
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0).addExecutorOrderedExecutionOption();
         MessagingFee memory fee = monStakingAOApp.quote(bEid, message, options, false);
 
         // make the user premium
@@ -53,7 +53,7 @@ contract LocalIntegrationTests is MonStakingTestBaseIntegration {
     function testPingNewChainContractPayLzToken() public {
         bytes memory message = abi.encode(user, true);
 
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0).addExecutorOrderedExecutionOption();
         MessagingFee memory fee = monStakingAOApp.quote(bEid, message, options, true);
         
         // make the user premium
@@ -77,7 +77,7 @@ contract LocalIntegrationTests is MonStakingTestBaseIntegration {
     function testPingNewChainContractUserAlreadyPremium() public {
         bytes memory message = abi.encode(user, true);
 
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0).addExecutorOrderedExecutionOption();
         MessagingFee memory fee = monStakingAOApp.quote(bEid, message, options, false);
 
         // make the user premium
@@ -94,7 +94,7 @@ contract LocalIntegrationTests is MonStakingTestBaseIntegration {
     function testLzSendNotEnoughNative() public {
         bytes memory message = abi.encode(user, true);
 
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0).addExecutorOrderedExecutionOption();
         MessagingFee memory fee = monStakingAOApp.quote(bEid, message, options, false);
 
         // make a user premium
@@ -107,8 +107,7 @@ contract LocalIntegrationTests is MonStakingTestBaseIntegration {
         vm.expectRevert(abi.encodeWithSelector(OAppSender.NotEnoughNative.selector, fee.nativeFee - 1));
         monStakingAOApp.pingNewChainContract{value: fee.nativeFee - 1}(uint32(bEid));
 
-        // fail if user gives more than fee
-        vm.expectRevert(abi.encodeWithSelector(OAppSender.NotEnoughNative.selector, fee.nativeFee + 1));
+        // succeeds if user gives more than fee
         monStakingAOApp.pingNewChainContract{value: fee.nativeFee + 1}(uint32(bEid));
     }
 
@@ -117,7 +116,7 @@ contract LocalIntegrationTests is MonStakingTestBaseIntegration {
         uint amount = 999;
         bytes memory message = abi.encode(user, true);
 
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0).addExecutorOrderedExecutionOption();
         MessagingFee memory fee = monStakingAOApp.quote(bEid, message, options, false);
 
         // fail if user gives less than fee
@@ -130,7 +129,7 @@ contract LocalIntegrationTests is MonStakingTestBaseIntegration {
     function testUpdateOtherChainsPayLzToken() public {
         bytes memory message = abi.encode(user, true);
 
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0).addExecutorOrderedExecutionOption();
         MessagingFee memory fee = monStakingAOApp.quote(bEid, message, options, true);
         
         // fail if user gives less than fee
@@ -147,7 +146,7 @@ contract LocalIntegrationTests is MonStakingTestBaseIntegration {
     function testUpdateOtherChainsNotPremium() public {
         bytes memory message = abi.encode(user, true);
 
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0).addExecutorOrderedExecutionOption();
         MessagingFee memory fee = monStakingAOApp.quote(bEid, message, options, false);
         
         // fail if user gives less than fee
@@ -166,7 +165,7 @@ contract LocalIntegrationTests is MonStakingTestBaseIntegration {
     function testRequireUnstakeAllZeroAmount() public {
         bytes memory message = abi.encode(user, true);
 
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0).addExecutorOrderedExecutionOption();
         MessagingFee memory fee = monStakingAOApp.quote(bEid, message, options, false);
         
         vm.startPrank(user);
@@ -181,8 +180,6 @@ contract LocalIntegrationTests is MonStakingTestBaseIntegration {
         vm.expectRevert(IMonStakingErrors.MonStaking__ZeroAmount.selector);
         monStakingBOApp.requireUnstakeAll{value : fee.nativeFee}();
     }
-
-    //call other functions with _lzsend from both a and b and _lzReceive
 
     function _stakeTokensAPremium(uint256 amount, uint256 nativeFee) internal {
         monsterTokenA.approve(address(monStakingAOApp), amount);

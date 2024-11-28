@@ -174,6 +174,9 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
     /// @dev It stores the user's unstake request when total unstaking is performed
     mapping(address user => UserUnstakeRequest unstakeRequest) public s_userUnstakeRequest;
 
+    // Mapping to track the maximum received nonce for each source endpoint and sender
+    mapping(uint32 eid => mapping(bytes32 sender => uint64 nonce)) private receivedNonce;
+
     /// @dev It stores the address of the proposed new owner
     address public s_newProposedOwner;
 
@@ -291,7 +294,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
 
         if (!s_isUserPremium[msg.sender] && block.timestamp <= i_endPremiumTimestamp){
             s_isUserPremium[msg.sender] = true;
-            _updateOtherChains(msg.sender, true);//@audit-issue this will revert for more than 2 chains because of how lzSend expects msg.value = nativeFee
+            _updateOtherChains(msg.sender, true);
         }
 
         IERC721(i_nftToken).safeTransferFrom(msg.sender, address(this), _tokenId);
@@ -512,7 +515,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
 
 
         if (s_userStakedTokenAmount[_from] == 0 && s_userNftAmount[_from] == 0) {
-            _clearUserTimeInfo(_from);//@audit-info what's the purpose of this function
+            _clearUserTimeInfo(_from);
 
             if(s_isUserPremium[_from]) {
                 _updateOtherChains(_from, false);
@@ -544,13 +547,14 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
 
         bool payInLzToken = msg.value == 0;
 
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+        // enforce at the executor level nonce ordering
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0).addExecutorOrderedExecutionOption();
 
         MessagingFee memory _fee = _quote(_chainId, message, options, payInLzToken);
 
         _lzSend(_chainId, message, options, _fee, msg.sender);
 
-        if (!payInLzToken && msg.value > _fee.nativeFee) {//@audit-issue will never be hit , because it will revert is lzSend because of _payNative check
+        if (!payInLzToken && msg.value > _fee.nativeFee) {
             (bool success, ) = msg.sender.call{value: msg.value - _fee.nativeFee}("");
             if (!success) revert MonStaking__TransferFailed();
         } 
@@ -933,7 +937,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
     * @dev It is used when a user is totally unstaking or is become premium when staking
     * @dev It emits a ChainsUpdated event
     */
-    function _updateOtherChains(address _user, bool _isPremium) internal {//@audit-issue this will fail for more than 2 chains because lzSend check
+    function _updateOtherChains(address _user, bool _isPremium) internal {
 
         uint256 chainsLength = s_supportedChains.length;
 
@@ -942,10 +946,10 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
             supportedChains[i] = s_supportedChains[i];
         }
 
-        //@audit-issue remove this part and only leave the next loop
-        MessagingFee memory totalFee = _batchQuote(supportedChains, abi.encode(_user, _isPremium), "", msg.value <= 0);//@audit-issue in testing even paying in lzTokens needs eth, check fork 
+        //@audit-issue remove this part and only leave the next loop , because it is checked implicitly in the next loop
+        // MessagingFee memory totalFee = _batchQuote(supportedChains, abi.encode(_user, _isPremium), "", msg.value <= 0);
 
-        if(msg.value > 0 && msg.value < totalFee.nativeFee) revert MonStaking__NotEnoughNativeTokens(totalFee.nativeFee);
+        // if(msg.value > 0 && msg.value < totalFee.nativeFee) revert MonStaking__NotEnoughNativeTokens(totalFee.nativeFee);
 
         uint256 totalNativeFeeUsed = 0;
         uint256 remainingValue = msg.value;
@@ -953,12 +957,12 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         for (uint256 i = 0; i < chainsLength; i++) {
             uint32 chainId = supportedChains[i];
 
-            bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+            bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0).addExecutorOrderedExecutionOption();
 
             MessagingFee memory fee = _quote(chainId, abi.encode(_user, _isPremium), options, msg.value <= 0);
 
             if(msg.value > 0) {
-                if(remainingValue < fee.nativeFee) revert MonStaking__NotEnoughNativeTokens(fee.nativeFee);//@audit-issue redundant code will never be hit unless _quote changes from the fist and second call , basically dead code remove the first one
+                if(remainingValue < fee.nativeFee) revert MonStaking__NotEnoughNativeTokens(fee.nativeFee);
                 remainingValue -= fee.nativeFee;
             }
 
@@ -991,6 +995,8 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         address /** _executor*/,
         bytes calldata /** _extraData*/
     ) internal override {
+
+        _acceptNonce(_origin.srcEid, _origin.sender, _origin.nonce);
 
         (address user, bool isPremium) = abi.decode(_message, (address, bool));
 
@@ -1038,6 +1044,36 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         }
 
         super._setPeer(_eid, _peer);
+    }
+
+    // added to support more than 2 chains staking
+
+    function _payNative(uint256 _nativeFee) internal override returns (uint256 nativeFee) {
+        if (msg.value < _nativeFee) revert NotEnoughNative(msg.value);
+        return _nativeFee;
+    }
+
+    // nonce ordering
+
+    /**
+     * @dev Public function to get the next expected nonce for a given source endpoint and sender.
+     * @param _srcEid Source endpoint ID.
+     * @param _sender Sender's address in bytes32 format.
+     * @return uint64 Next expected nonce.
+     */
+    function nextNonce(uint32 _srcEid, bytes32 _sender) public view virtual override returns (uint64) {
+        return receivedNonce[_srcEid][_sender] + 1;
+    }
+
+    /**
+     * @dev Internal function to accept nonce from the specified source endpoint and sender.
+     * @param _srcEid Source endpoint ID.
+     * @param _sender Sender's address in bytes32 format.
+     * @param _nonce The nonce to be accepted.
+     */
+    function _acceptNonce(uint32 _srcEid, bytes32 _sender, uint64 _nonce) internal virtual {
+        receivedNonce[_srcEid][_sender] += 1;
+        require(_nonce == receivedNonce[_srcEid][_sender], "OApp: invalid nonce");
     }
 
     // added for tests

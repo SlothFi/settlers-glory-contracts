@@ -13,6 +13,7 @@ import {IMonStakingErrors} from "../../../src/interfaces/errors/IMonStakingError
 import "forge-std/console.sol";
 
 import {MonStakingTestBaseIntegrationThreeChains} from "../MonStakingTestBaseIntegration3Chains.t.sol";
+import {TestHelperOz5} from "@layerzerolabs/test-devtools-evm-foundry/contracts/TestHelperOz5.sol";
 
 import {OptionsBuilder} from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
 
@@ -27,23 +28,45 @@ contract testThreeChains is MonStakingTestBaseIntegrationThreeChains {
     }
 
     /// @notice Tests the send functionality of MonStaking.
-    /// @dev Simulates message passing from A -> B and A -> C and checks for data integrity.
-    function testPingNewChainContractFail() public {
+    /// @dev Simulates message passing from A -> B and A -> C.
+    function testPingNewChainContractSucceeds() public {
         uint amount = 1000;
 
         bytes memory message = abi.encode(user, true);
 
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0).addExecutorOrderedExecutionOption();
         MessagingFee memory feeToB = monStakingAOApp.quote(bEid, message, options, false);
         MessagingFee memory feeToC = monStakingAOApp.quote(cEid, message, options, false);
 
         // make the user premium
         vm.startPrank(user);
         monsterTokenA.approve(address(monStakingAOApp), amount);
-        vm.expectRevert(abi.encodeWithSelector(OAppSender.NotEnoughNative.selector, feeToB.nativeFee + feeToC.nativeFee));
+
         monStakingAOApp.stakeTokens{value: feeToB.nativeFee + feeToC.nativeFee}(amount);
         verifyPackets(bEid, addressToBytes32(address(monStakingBOApp)));
     }
+
+    // function testNotOrderedMessagesFail() public {
+    //     // Prepare the packet data
+    //     uint32 srcEid = aEid; // Source endpoint ID
+    //     address sender = address(monStakingAOApp); // Sender address
+    //     uint64 nonce = 0; // Custom nonce
+    //     bytes memory message = abi.encode(user, true); // Custom message
+
+    //     // Create the packet bytes
+    //     bytes memory packetBytes = abi.encodePacked(
+    //         srcEid,
+    //         sender,
+    //         nonce,
+    //         message
+    //     );
+
+    //     // Prepare the options (if any)
+    //     bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0).addExecutorOrderedExecutionOption(); // Custom options
+
+    //     // Simulate the lzReceive call
+    //     this.lzReceive(packetBytes, options);
+    // }
 
     function _stakeTokensAPremium(uint256 amount, uint256 nativeFee) internal {
         monsterTokenA.approve(address(monStakingAOApp), amount);

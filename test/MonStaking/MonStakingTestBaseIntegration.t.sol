@@ -127,6 +127,7 @@ contract MonStakingTestBaseIntegration is Test, TestHelperOz5 {
         monsterTokenA = new MockMonsterToken();
         monsterTokenAddressA = address(monsterTokenA);
         monsterTokenA.mint(user, 10000 ether);
+        monsterTokenA.mint(marketPlaceA, 10000 ether);
 
         // Deploy MockMonsterToken for OApp B
         monsterTokenB = new MockMonsterToken();

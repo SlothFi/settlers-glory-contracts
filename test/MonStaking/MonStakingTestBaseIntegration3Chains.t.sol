@@ -11,8 +11,6 @@ import {MockToken} from "../../src/mocks/MockToken.sol";
 import {MonStaking} from "../../src/MonStaking.sol";
 import {LiquidStakedMonster} from "../../src/LiquidStakedMonster.sol";
 
-import {MockLayerZeroEndpointV2} from "./helper/mockLayerZeroEndpoint.t.sol";
-
 import {DelegateRegistry} from "@delegate_registry/contracts/DelegateRegistry.sol";
 
 import {TestHelperOz5} from "@layerzerolabs/test-devtools-evm-foundry/contracts/TestHelperOz5.sol";
@@ -35,7 +33,6 @@ contract MonStakingTestBaseIntegrationThreeChains is Test, TestHelperOz5 {
     MonERC721 public monERC721A;
     MonERC721 public monERC721B;
     MonERC721 public monERC721C;
-    MockLayerZeroEndpointV2 public mockLayerZeroEndpoint;
 
     // Delegate registries
     DelegateRegistry public delegateRegistryContractA;
@@ -59,6 +56,7 @@ contract MonStakingTestBaseIntegrationThreeChains is Test, TestHelperOz5 {
     
     // User address
     address public user = makeAddr("user");
+    address public user2 = makeAddr("user2");
 
     // Addresses for OApp A
     address public marketPlaceA = makeAddr("marketPlaceA");
@@ -114,8 +112,6 @@ contract MonStakingTestBaseIntegrationThreeChains is Test, TestHelperOz5 {
 
         deployMockTokens();
 
-        deployMockLayerZeroEndpoint();
-
         deployDelegateRegistries();
 
         deployMonERC721Contracts();
@@ -134,6 +130,7 @@ contract MonStakingTestBaseIntegrationThreeChains is Test, TestHelperOz5 {
     function fundUser() internal {
         // Funding the user
         vm.deal(user, 1000000 ether);
+        vm.deal(user2, 1000000 ether);
     }
 
     function deployMockTokens() internal {
@@ -146,22 +143,19 @@ contract MonStakingTestBaseIntegrationThreeChains is Test, TestHelperOz5 {
         monsterTokenA = new MockMonsterToken();
         monsterTokenAddressA = address(monsterTokenA);
         monsterTokenA.mint(user, 10000 ether);
+        monsterTokenA.mint(user2, 10000 ether);
 
         // Deploy MockMonsterToken for OApp B
         monsterTokenB = new MockMonsterToken();
         monsterTokenAddressB = address(monsterTokenB);
         monsterTokenB.mint(user, 10000 ether);
+        monsterTokenB.mint(user2, 10000 ether);
 
         // Deploy MockMonsterToken for OApp C
         monsterTokenC = new MockMonsterToken();
         monsterTokenAddressC = address(monsterTokenC);
         monsterTokenC.mint(user, 10000 ether);
-    }
-
-    function deployMockLayerZeroEndpoint() internal {
-        // Deploy a mock LayerZero endpoint
-        mockLayerZeroEndpoint = new MockLayerZeroEndpointV2();
-        endpoint = address(mockLayerZeroEndpoint);
+        monsterTokenC.mint(user2, 10000 ether);
     }
 
     function deployDelegateRegistries() internal {

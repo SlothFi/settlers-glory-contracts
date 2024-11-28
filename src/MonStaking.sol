@@ -175,7 +175,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
     mapping(address user => UserUnstakeRequest unstakeRequest) public s_userUnstakeRequest;
 
     // Mapping to track the maximum received nonce for each source endpoint and sender
-    mapping(uint32 eid => mapping(bytes32 sender => uint64 nonce)) private receivedNonce;
+    mapping(uint32 eid => mapping(bytes32 sender => uint64 nonce)) public receivedNonce;
 
     /// @dev It stores the address of the proposed new owner
     address public s_newProposedOwner;
@@ -1073,7 +1073,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
      */
     function _acceptNonce(uint32 _srcEid, bytes32 _sender, uint64 _nonce) internal virtual {
         receivedNonce[_srcEid][_sender] += 1;
-        require(_nonce == receivedNonce[_srcEid][_sender], "OApp: invalid nonce");
+        if (_nonce != receivedNonce[_srcEid][_sender]) revert MonStaking_InvalidNonce();
     }
 
     // added for tests

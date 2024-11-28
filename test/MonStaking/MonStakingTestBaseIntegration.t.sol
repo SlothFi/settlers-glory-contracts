@@ -2,21 +2,19 @@
 
 pragma solidity 0.8.24;
 
-import {Test} from "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-import {MonERC721} from "../../src/MonERC721.sol";
-import {MockMonsterToken} from "../../src/mocks/MockMonsterToken.sol";
-import {MockToken} from "../../src/mocks/MockToken.sol";
-import {MonStaking} from "../../src/MonStaking.sol";
-import {LiquidStakedMonster} from "../../src/LiquidStakedMonster.sol";
+import { MonERC721 } from "../../src/MonERC721.sol";
+import { MockMonsterToken } from "../../src/mocks/MockMonsterToken.sol";
+import { MockToken } from "../../src/mocks/MockToken.sol";
+import { MonStaking } from "../../src/MonStaking.sol";
+import { LiquidStakedMonster } from "../../src/LiquidStakedMonster.sol";
 
-import {MockLayerZeroEndpointV2} from "./helper/mockLayerZeroEndpoint.t.sol";
+import { DelegateRegistry } from "@delegate_registry/contracts/DelegateRegistry.sol";
 
-import {DelegateRegistry} from "@delegate_registry/contracts/DelegateRegistry.sol";
-
-import {TestHelperOz5} from "@layerzerolabs/test-devtools-evm-foundry/contracts/TestHelperOz5.sol";
-import {EndpointV2Mock as EndpointV2} from "@layerzerolabs/test-devtools-evm-foundry/contracts/mocks/EndpointV2Mock.sol";
+import { TestHelperOz5 } from "@layerzerolabs/test-devtools-evm-foundry/contracts/TestHelperOz5.sol";
+import { EndpointV2Mock as EndpointV2 } from "@layerzerolabs/test-devtools-evm-foundry/contracts/mocks/EndpointV2Mock.sol";
 
 /**
  * @title MonStakingTestBaseIntegration
@@ -24,7 +22,6 @@ import {EndpointV2Mock as EndpointV2} from "@layerzerolabs/test-devtools-evm-fou
  * @dev Contains common setup logic
  */
 contract MonStakingTestBaseIntegration is Test, TestHelperOz5 {
-
     MockToken public mockLzTokenA;
     MockToken public mockLzTokenB;
 
@@ -32,7 +29,6 @@ contract MonStakingTestBaseIntegration is Test, TestHelperOz5 {
     MockMonsterToken public monsterTokenB;
     MonERC721 public monERC721A;
     MonERC721 public monERC721B;
-    MockLayerZeroEndpointV2 public mockLayerZeroEndpoint;
 
     // Delegate registries
     DelegateRegistry public delegateRegistryContractA;
@@ -48,7 +44,7 @@ contract MonStakingTestBaseIntegration is Test, TestHelperOz5 {
     address public delegateRegistryB;
 
     address public endpoint;
-    
+
     // User address
     address public user = makeAddr("user");
 
@@ -57,7 +53,7 @@ contract MonStakingTestBaseIntegration is Test, TestHelperOz5 {
     address public fundsWalletA = makeAddr("fundsWalletA");
     address public defaultAdminRoleA = makeAddr("defaultAdminRoleA");
     address public operatorRoleA = makeAddr("operatorRoleA");
-    
+
     // Owner addresses
     address public delegatedA = address(this);
     address public ownerA = delegatedA;
@@ -96,8 +92,6 @@ contract MonStakingTestBaseIntegration is Test, TestHelperOz5 {
 
         deployMockTokens();
 
-        deployMockLayerZeroEndpoint();
-
         deployDelegateRegistries();
 
         deployMonERC721Contracts();
@@ -133,12 +127,6 @@ contract MonStakingTestBaseIntegration is Test, TestHelperOz5 {
         monsterTokenB = new MockMonsterToken();
         monsterTokenAddressB = address(monsterTokenB);
         monsterTokenB.mint(user, 10000 ether);
-    }
-
-    function deployMockLayerZeroEndpoint() internal {
-        // Deploy a mock LayerZero endpoint
-        mockLayerZeroEndpoint = new MockLayerZeroEndpointV2();
-        endpoint = address(mockLayerZeroEndpoint);
     }
 
     function deployDelegateRegistries() internal {
@@ -180,48 +168,52 @@ contract MonStakingTestBaseIntegration is Test, TestHelperOz5 {
         );
         monERC721AddressB = address(monERC721B);
     }
-    
+
     // issue with stack too deep because of number of parameters , need to do struct but doesn't work in _deployOApp
 
     function deployMonStakingOApps() internal {
         // Deploying the MonStaking OApps
-        monStakingAOApp = MonStaking(_deployOApp(
-            type(MonStaking).creationCode, 
-            abi.encode(
-                endpoints[aEid],
-                address(this),
-                premiumDuration,
-                monsterTokenAddressA,
-                monERC721AddressA,
-                tokenBaseMultiplier,
-                tokenPremiumMultiplier,
-                nftBaseMultiplier,
-                nftPremiumMultiplier,
-                delegateRegistryA,
-                marketPlaceA,
-                operatorRoleA,
-                defaultAdminRoleA
+        monStakingAOApp = MonStaking(
+            _deployOApp(
+                type(MonStaking).creationCode,
+                abi.encode(
+                    endpoints[aEid],
+                    address(this),
+                    premiumDuration,
+                    monsterTokenAddressA,
+                    monERC721AddressA,
+                    tokenBaseMultiplier,
+                    tokenPremiumMultiplier,
+                    nftBaseMultiplier,
+                    nftPremiumMultiplier,
+                    delegateRegistryA,
+                    marketPlaceA,
+                    operatorRoleA,
+                    defaultAdminRoleA
+                )
             )
-        ));
-        
-        monStakingBOApp = MonStaking(_deployOApp(
-            type(MonStaking).creationCode, 
-            abi.encode(
-                endpoints[bEid],
-                address(this),
-                premiumDuration,
-                monsterTokenAddressB,
-                monERC721AddressB,
-                tokenBaseMultiplier,
-                tokenPremiumMultiplier,
-                nftBaseMultiplier,
-                nftPremiumMultiplier,
-                delegateRegistryB,
-                marketPlaceB,
-                operatorRoleB,
-                defaultAdminRoleB
+        );
+
+        monStakingBOApp = MonStaking(
+            _deployOApp(
+                type(MonStaking).creationCode,
+                abi.encode(
+                    endpoints[bEid],
+                    address(this),
+                    premiumDuration,
+                    monsterTokenAddressB,
+                    monERC721AddressB,
+                    tokenBaseMultiplier,
+                    tokenPremiumMultiplier,
+                    nftBaseMultiplier,
+                    nftPremiumMultiplier,
+                    delegateRegistryB,
+                    marketPlaceB,
+                    operatorRoleB,
+                    defaultAdminRoleB
+                )
             )
-        ));
+        );
     }
 
     function wireOApps() internal {

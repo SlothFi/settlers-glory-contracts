@@ -87,4 +87,7 @@ interface IMonStakingErrors {
 
     /// @dev Throws when a native transfer fails
     error MonStaking__TransferFailed();
+
+    /// @dev Throws when nonce is invalid
+    error MonStaking_InvalidNonce();
 }

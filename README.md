@@ -1,66 +1,47 @@
-## Foundry
+# DefiMon Staking v2
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+## Setup
 
-Foundry consists of:
+Before running and compiling the project, follow these steps to set up your development environment:
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+1. **Install Dependencies:**
 
-## Documentation
+   Ensure you have `pnpm` installed. If not, install it from [pnpm.io](https://pnpm.io/installation).
 
-https://book.getfoundry.sh/
+   ```shell
+   pnpm install
+   ```
+
+2. **Initialize and Update Git Submodules:**
+
+   Initialize and update the Git submodules required for the project.
+
+   ```shell
+   git submodule init
+   git submodule update
+   ```
 
 ## Usage
 
 ### Build
 
+Compile the smart contracts using Forge:
+
 ```shell
-$ forge build
+forge compile
 ```
 
 ### Test
 
-```shell
-$ forge test
-```
-
-### Format
+Run the test suite:
 
 ```shell
-$ forge fmt
+forge test
 ```
 
-### Gas Snapshots
+## Issues:
 
-```shell
-$ forge snapshot
-```
+The following test files currently encounter stack too deep errors during coverage analysis:
 
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+- MonStakingTestBaseIntegration.t.sol
+- MonStakingTestBaseIntegration3Chains.t.sol

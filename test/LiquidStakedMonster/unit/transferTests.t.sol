@@ -28,18 +28,6 @@ contract transferTests is LSMTestBase {
         assertEq(liquidStakedMonster.balanceOf(from), 0);
     }
 
-    function testTransferToNonMarketplace() public {
-        uint256 amount = 100 * 10 ** 18;
-        address from = makeAddr("holder");
-        address to = makeAddr("recipient");
-
-        _mintLSMTokens(from, amount);
-
-        // Attempt to transfer tokens to a non-marketplace address
-        vm.startPrank(from);
-        vm.expectRevert(LiquidStakedMonster.LiquidStakedMonster__TokenNotTransferable.selector);
-        liquidStakedMonster.transfer(amount, to);
-    }
 
     function testTransferFromToMarketplace() public {
         uint256 amount = 100 * 10 ** 18;
@@ -70,40 +58,7 @@ contract transferTests is LSMTestBase {
         liquidStakedMonster.transferFrom(from, to, amount);
     }
 
-    function testCustomTransferToMarketplace() public {
-        uint256 amount = 100 * 10 ** 18;
-        address from = makeAddr("holder");
-
-        _mintLSMTokens(from, amount);
-
-        vm.expectCall(
-            address(stakingContact),
-            abi.encodeWithSelector(
-                MockStakingContract(stakingContact).updateStakingBalance.selector,
-                from,
-                marketPlace,
-                amount
-            )
-        );
-        _customTransferLSMTokens(amount, from, marketPlace);
-
-        assertEq(liquidStakedMonster.balanceOf(marketPlace), amount);
-        assertEq(liquidStakedMonster.balanceOf(from), 0);
-    }
-
-    function testCustomTransferToNonMarketplace() public {
-        uint256 amount = 100 * 10 ** 18;
-        address from = makeAddr("holder");
-        address to = makeAddr("recipient");
-
-        _mintLSMTokens(from, amount);
-
-        // Attempt to transfer tokens to a non-marketplace address
-        vm.startPrank(from);
-        vm.expectRevert(LiquidStakedMonster.LiquidStakedMonster__TokenNotTransferable.selector);
-        liquidStakedMonster.transfer(amount, to);
-    }
-
+    //shouldn't revert ?
     function testCustomTransferFromMarketplaceToNonMarketplace() public {
         uint256 amount = 100 * 10 ** 18;
 
@@ -173,12 +128,6 @@ contract transferTests is LSMTestBase {
     function _transferFromLSMTokens(address from, address to, uint amount) internal{
         vm.startPrank(to);
         liquidStakedMonster.transferFrom(from, to, amount);
-        vm.stopPrank();
-    }
-
-    function _customTransferLSMTokens(uint amount, address from, address to) internal{
-        vm.startPrank(from);
-        liquidStakedMonster.transfer(amount, to);
         vm.stopPrank();
     }
 

@@ -36,7 +36,7 @@ contract LSMIntegrationTests is MonStakingTestBaseIntegration {
 
         bytes memory message = abi.encode(user, true);
 
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0).addExecutorOrderedExecutionOption();
         MessagingFee memory fee = monStakingAOApp.quote(bEid, message, options, false);
 
         // make the user premium
@@ -51,7 +51,6 @@ contract LSMIntegrationTests is MonStakingTestBaseIntegration {
 
         message = abi.encode(user, false);
 
-        options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
         fee = monStakingAOApp.quote(bEid, message, options, false);
 
         vm.startPrank(marketPlaceA);
@@ -60,6 +59,44 @@ contract LSMIntegrationTests is MonStakingTestBaseIntegration {
     }
 
 
+    function testStakingBalanceAfterTransfer() public {
+        vm.deal(marketPlaceA, 1000000 ether);
+        
+        uint256 amount = 1000;
+
+        LiquidStakedMonster liquidStakedMonsterA = LiquidStakedMonster(liquidStakedMonsterAddressA);
+
+        bytes memory message = abi.encode(user, true);
+
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0).addExecutorOrderedExecutionOption();
+        MessagingFee memory fee = monStakingAOApp.quote(bEid, message, options, false);
+
+        // make the user premium
+        vm.startPrank(user);
+        _stakeTokensAPremium(amount, fee.nativeFee);
+
+        verifyPackets(bEid, addressToBytes32(address(monStakingBOApp)));
+        
+        assertEq(monStakingAOApp.s_userStakedTokenAmount(user), amount);
+        assertEq(monStakingAOApp.s_userStakedTokenAmount(marketPlaceA), 0);
+
+        liquidStakedMonsterA.approve(marketPlaceA, amount);
+
+        vm.stopPrank();
+
+        message = abi.encode(user, false);
+
+        fee = monStakingAOApp.quote(bEid, message, options, false);
+
+        vm.startPrank(marketPlaceA);
+
+        liquidStakedMonsterA.transferFrom{value: fee.nativeFee}(amount, user, marketPlaceA);
+
+        verifyPackets(bEid, addressToBytes32(address(monStakingBOApp)));
+
+        assertEq(monStakingAOApp.s_userStakedTokenAmount(user), 0);
+        assertEq(monStakingAOApp.s_userStakedTokenAmount(marketPlaceA), amount);
+    }
 
     function _stakeTokensAPremium(uint256 amount, uint256 nativeFee) internal {
         monsterTokenA.approve(address(monStakingAOApp), amount);

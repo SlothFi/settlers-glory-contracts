@@ -91,6 +91,9 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
     /// @dev Chains are ETH, ARB and AVAX
     uint8 public constant BITMAP_BOUND = type(uint8).max;
 
+    /// @dev It stores a week in seconds
+    uint256 constant SECONDS_PER_WEEK = 604800;
+
     /// @dev It stores the time in which the contract has been created
     uint256 public immutable i_creationTimestamp;
 
@@ -812,8 +815,22 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
     ) internal view returns (uint256) {
         uint256 multiplier = _isPremium ? s_tokenPremiumMultiplier : s_tokenBaseMultiplier;
         uint256 timeDiff = _currentTimestamp - _lastTimestamp;
+
         uint256 points = _tokenAmount * multiplier * timeDiff;
-        return _enforcePointDecimals(points) / i_monsterTokenDecimals / BPS;
+        uint256 basePoints = _enforcePointDecimals(points) / i_monsterTokenDecimals / BPS;
+
+        // Calculate the number of weeks passed
+        uint256 weeksPassed = timeDiff / SECONDS_PER_WEEK;
+
+        // Apply the 5% multiplier for each week passed
+        if (weeksPassed <= 20){
+            basePoints = basePoints + (basePoints * 5 * weeksPassed / 100);
+        }
+        else{
+            basePoints = basePoints + (basePoints * 2);
+        }
+
+        return basePoints;
     }
 
     /**
@@ -831,8 +848,22 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
     {
         uint256 multiplier = _isPremium ? s_nftPremiumMultiplier : s_nftBaseMultiplier;
         uint256 timeDiff = _currentTimestamp - _lastTimestamp;
+
         uint256 points = _nftAmount * multiplier * timeDiff;
-        return _enforcePointDecimals(points) / BPS;
+        uint256 basePoints = _enforcePointDecimals(points) / BPS;
+
+        // Calculate the number of weeks passed
+        uint256 weeksPassed = timeDiff / SECONDS_PER_WEEK;
+
+        // Apply the 5% multiplier for each week passed
+        if (weeksPassed <= 20){
+            basePoints = basePoints + (basePoints * 5 * weeksPassed / 100);
+        }
+        else{
+            basePoints = basePoints + (basePoints * 2);
+        }
+
+        return basePoints;
     }
 
     /**
@@ -945,11 +976,6 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         for (uint256 i = 0; i < chainsLength; i++) {
             supportedChains[i] = s_supportedChains[i];
         }
-
-        //@audit-issue remove this part and only leave the next loop , because it is checked implicitly in the next loop
-        // MessagingFee memory totalFee = _batchQuote(supportedChains, abi.encode(_user, _isPremium), "", msg.value <= 0);
-
-        // if(msg.value > 0 && msg.value < totalFee.nativeFee) revert MonStaking__NotEnoughNativeTokens(totalFee.nativeFee);
 
         uint256 totalNativeFeeUsed = 0;
         uint256 remainingValue = msg.value;

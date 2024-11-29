@@ -183,6 +183,9 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
     /// @dev It stores the address of the proposed new owner
     address public s_newProposedOwner;
 
+    /// @dev It stores the user's stake timestamp
+    mapping (address user => uint32 timestamp) public s_userStartStakeTime;
+
     /**
     * @notice Modifier to check if the msg.sender is the LiquidStakedMonster contract
     * @dev It is used to restrict the access to the LiquidStakedMonster contract 
@@ -265,6 +268,10 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
 
         _updateUserState(msg.sender);
 
+        if (s_userStakedTokenAmount[msg.sender] == 0 && s_userNftAmount[msg.sender] == 0) {
+            s_userStartStakeTime[msg.sender] = uint32(block.timestamp);
+        }
+
         s_userStakedTokenAmount[msg.sender] += _amount;
         
         if (!s_isUserPremium[msg.sender] && block.timestamp <= i_endPremiumTimestamp) {
@@ -291,6 +298,10 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         if(_tokenId == 0 || _tokenId > i_nftMaxSupply) revert MonStaking__InvalidTokenId();
 
         _updateUserState(msg.sender);
+
+        if (s_userStakedTokenAmount[msg.sender] == 0 && s_userNftAmount[msg.sender] == 0) {
+            s_userStartStakeTime[msg.sender] = uint32(block.timestamp);
+        }
 
         s_userNftAmount[msg.sender] += 1;
         s_nftOwner[_tokenId] = msg.sender;
@@ -330,6 +341,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
 
         if(s_userStakedTokenAmount[msg.sender] == 0 && s_userNftAmount[msg.sender] == 0) {
             _clearUserTimeInfo(msg.sender);
+            _clearUserStakeTimeInfo(msg.sender);
         }
 
         IERC20(i_monsterToken).safeTransfer(msg.sender, _amount);
@@ -364,6 +376,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
 
         if(s_userStakedTokenAmount[msg.sender] == 0 && s_userNftAmount[msg.sender] == 0) {
             _clearUserTimeInfo(msg.sender);
+            _clearUserStakeTimeInfo(msg.sender);
         }
 
         IERC721(i_nftToken).safeTransferFrom(address(this), msg.sender, _tokenId);
@@ -394,6 +407,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
 
         if(s_userStakedTokenAmount[msg.sender] == 0 && s_userNftAmount[msg.sender] == 0) {
             _clearUserTimeInfo(msg.sender);
+            _clearUserStakeTimeInfo(msg.sender);
         }
 
         for(uint256 i = 0; i < tokenIdsLength; ++i){
@@ -450,6 +464,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         }
 
         _clearUserTimeInfo(msg.sender);
+        _clearUserStakeTimeInfo(msg.sender);
 
         if(userTokenBalance > 0) LiquidStakedMonster(i_lsToken).burn(msg.sender, userTokenBalance);
 
@@ -513,12 +528,17 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         _updateUserState(_from);
         _updateUserState(_to);
 
+        if (s_userStakedTokenAmount[_to] == 0 && s_userNftAmount[_to] == 0) {
+            s_userStartStakeTime[_to] = uint32(block.timestamp);
+        }
+
         s_userStakedTokenAmount[_from] -= _amount;
         s_userStakedTokenAmount[_to] += _amount;
 
 
         if (s_userStakedTokenAmount[_from] == 0 && s_userNftAmount[_from] == 0) {
             _clearUserTimeInfo(_from);
+            _clearUserStakeTimeInfo(_from);
 
             if(s_isUserPremium[_from]) {
                 _updateOtherChains(_from, false);
@@ -799,6 +819,10 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         delete s_userLastUpdatedTimestamp[_user];
     }
 
+    function _clearUserStakeTimeInfo(address _user) internal {
+        delete s_userStartStakeTime[_user];
+    }
+
     /**
     * @notice It calculates the user points accrued from the token staking
     * @param _tokenAmount - The amount of tokens staked
@@ -819,8 +843,13 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         uint256 points = _tokenAmount * multiplier * timeDiff;
         uint256 basePoints = _enforcePointDecimals(points) / i_monsterTokenDecimals / BPS;
 
+        // if the user has not staked before
+        if (s_userStartStakeTime[msg.sender] == 0){
+            return basePoints;
+        }
+
         // Calculate the number of weeks passed
-        uint256 weeksPassed = timeDiff / SECONDS_PER_WEEK;
+        uint256 weeksPassed = (_currentTimestamp - s_userStartStakeTime[msg.sender]) / SECONDS_PER_WEEK;
 
         // Apply the 5% multiplier for each week passed
         if (weeksPassed <= 20){

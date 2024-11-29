@@ -46,6 +46,18 @@ contract DeployConfig is Script {
                 baseURI: vm.envString("ETHEREUM_BASE_URI"),
                 fundsWallet: vm.envAddress("ETHEREUM_FUNDS_WALLET")
             });
+        } else if (block.chainid == 43114) { // Avalanche chain ID
+            return MonERC721Config({
+                name: vm.envString("AVALANCHE_ERC721_NAME"),
+                symbol: vm.envString("AVALANCHE_ERC721_SYMBOL"),
+                owner: vm.envAddress("AVALANCHE_OWNER_NFT"),
+                totalSupply: vm.envUint("AVALANCHE_TOTAL_SUPPLY"),
+                priceInNativeToken: vm.envUint("AVALANCHE_PRICE_IN_NATIVE_TOKEN"),
+                priceInMonsterToken: vm.envUint("AVALANCHE_PRICE_IN_MONSTER_TOKEN"),
+                monsterTokenAddress: vm.envAddress("AVALANCHE_MONSTER_TOKEN_ADDRESS"),
+                baseURI: vm.envString("AVALANCHE_BASE_URI"),
+                fundsWallet: vm.envAddress("AVALANCHE_FUNDS_WALLET")
+            });
         } else { // Local chain
 
             MockMonsterToken monsterTokenContract = new MockMonsterToken();
@@ -97,6 +109,22 @@ contract DeployConfig is Script {
                 marketPlace: vm.envAddress("ETHEREUM_MARKET_PLACE"),
                 operatorRole: vm.envAddress("ETHEREUM_OPERATOR_ROLE"),
                 defaultAdmin: vm.envAddress("ETHEREUM_DEFAULT_ADMIN_ROLE")
+            });
+        } else if (block.chainid == 43114) { // Avalanche chain ID
+            return MonStaking.Config({
+                endpoint: vm.envAddress("AVALANCHE_ENDPOINT"),
+                delegated: vm.envAddress("AVALANCHE_DELEGATED"),
+                premiumDuration: vm.envUint("AVALANCHE_PREMIUM_DURATION"),
+                monsterToken: vm.envAddress("AVALANCHE_MONSTER_TOKEN_ADDRESS"),
+                nftToken: address(0),
+                tokenBaseMultiplier: vm.envUint("AVALANCHE_TOKEN_BASE_MULTIPLIER"),
+                tokenPremiumMultiplier: vm.envUint("AVALANCHE_TOKEN_PREMIUM_MULTIPLIER"),
+                nftBaseMultiplier: vm.envUint("AVALANCHE_NFT_BASE_MULTIPLIER"),
+                nftPremiumMultiplier: vm.envUint("AVALANCHE_NFT_PREMIUM_MULTIPLIER"),
+                delegateRegistry: vm.envAddress("AVALANCHE_DELEGATE_REGISTRY_ADDRESS"),
+                marketPlace: vm.envAddress("AVALANCHE_MARKET_PLACE"),
+                operatorRole: vm.envAddress("AVALANCHE_OPERATOR_ROLE"),
+                defaultAdmin: vm.envAddress("AVALANCHE_DEFAULT_ADMIN_ROLE")
             });
         } else { // Local chain
 

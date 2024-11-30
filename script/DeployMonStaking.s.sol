@@ -30,6 +30,8 @@ contract DeployMonStaking is DeployMonERC721 {
         
         MonStaking.Config memory config = getMonStakingConfig();
 
+        uint256 weekUpperBound = getWeekUpperBound();
+
         vm.startBroadcast();
 
         address monERC721 = deployMonERC721();
@@ -39,6 +41,9 @@ contract DeployMonStaking is DeployMonERC721 {
         monStaking = new MonStaking(
             config
         );
+
+        // need to have ownership of monStaking
+        monStaking.setWeekUpperBound(weekUpperBound);
 
         console.log("Deployed MonStaking at:", address(monStaking));
 

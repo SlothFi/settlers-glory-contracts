@@ -99,7 +99,11 @@ contract MonStakingTestBase is Test {
             defaultAdmin: defaultAdminRole
         });
 
+
         monStaking = new MonStaking(config);
+
+        vm.prank(delegated);
+        monStaking.setWeekUpperBound(20);
 
         liquidStakedMonsterAddress = monStaking.i_lsToken();
         liquidStakedMonster = LiquidStakedMonster(liquidStakedMonsterAddress);

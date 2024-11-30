@@ -276,6 +276,12 @@ contract MonStakingTestBaseIntegrationThreeChains is Test, TestHelperOz5 {
         ));
     }
 
+    function setUpUpperBound() internal {
+        monStakingAOApp.setWeekUpperBound(20);
+        monStakingBOApp.setWeekUpperBound(20);
+        monStakingCOApp.setWeekUpperBound(20);
+    }
+
     function wireOApps() internal {
         // Manual wiring of the OApps
         monStakingAOApp.setPeer(uint32(bEid), bytes32(uint(uint160(address(monStakingBOApp)))));

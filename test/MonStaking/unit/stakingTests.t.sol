@@ -2,6 +2,8 @@
 
 pragma solidity 0.8.24;
 
+import "forge-std/console.sol";
+
 import {MonStakingTestBase} from "../MonStakingTestBase.t.sol";
 import {MockMonsterToken} from "../../../src/mocks/MockMonsterToken.sol";
 import {MonStaking} from "../../../src/MonStaking.sol";
@@ -275,6 +277,27 @@ contract StakingTests is MonStakingTestBase {
         vm.stopPrank();
 
         assertEq(monStaking.s_userLastUpdatedTimestamp(from), block.timestamp);
+    }
+
+    function testPointsCalculationAfterOneWeek() public {
+        uint256 amount = 1000 * 10 ** 18;
+    
+        vm.startPrank(user);
+        monsterToken.approve(address(monStaking), amount);
+        monStaking.stakeTokens(amount);
+        vm.stopPrank();
+    
+        // Move time forward by one week
+        vm.warp(block.timestamp + 1 weeks);
+
+        vm.prank(user);
+        monStaking.syncPoints();
+
+        uint256 basePoints = (amount * monStaking.s_tokenPremiumMultiplier() * 1 weeks) * monStaking.POINTS_DECIMALS() / monStaking.i_monsterTokenDecimals() / monStaking.BPS();
+        uint256 expectedPoints = basePoints + (basePoints * 5 / 100);
+        uint256 actualPoints = monStaking.getPotentialCurrentPoints(user);
+    
+        assertEq(actualPoints, expectedPoints, "Points after one week should be correct");
     }
 
 }

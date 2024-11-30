@@ -101,6 +101,8 @@ contract MonStakingTestBaseIntegration is Test, TestHelperOz5 {
 
         deployMonStakingOApps();
 
+        setUpUpperBound();
+
         wireOApps();
 
         getLiquidStakingTokenAddresses();
@@ -211,6 +213,11 @@ contract MonStakingTestBaseIntegration is Test, TestHelperOz5 {
                 defaultAdminRoleB
             )
         ));
+    }
+
+    function setUpUpperBound() internal {
+        monStakingAOApp.setWeekUpperBound(20);
+        monStakingBOApp.setWeekUpperBound(20);
     }
 
     function wireOApps() internal {

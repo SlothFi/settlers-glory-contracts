@@ -77,6 +77,18 @@ contract DeployConfig is Script {
         }
     }
 
+    function getWeekUpperBound() public returns (uint256) {
+        if (block.chainid == 42161) { // Arbitrum chain ID
+            return vm.envUint("ARBITRUM_WEEK_UPPER_BOUND");
+        } else if (block.chainid == 1) { // Ethereum chain ID
+            return vm.envUint("ETHEREUM_WEEK_UPPER_BOUND");
+        } else if (block.chainid == 43114) { // Avalanche chain ID
+            return vm.envUint("AVALANCHE_WEEK_UPPER_BOUND");
+        } else { // Local chain
+            return vm.envUint("ETHEREUM_WEEK_UPPER_BOUND");
+        }
+    }    
+
     function getMonStakingConfig() public returns (MonStaking.Config memory) {
         if (block.chainid == 42161) { // Arbitrum chain ID
             return MonStaking.Config({
@@ -93,7 +105,7 @@ contract DeployConfig is Script {
                 marketPlace: vm.envAddress("ARBITRUM_MARKET_PLACE"),
                 operatorRole: vm.envAddress("ARBITRUM_OPERATOR_ROLE"),
                 defaultAdmin: vm.envAddress("ARBITRUM_DEFAULT_ADMIN_ROLE")
-            });
+                });
         } else if (block.chainid == 1) { // Ethereum chain ID
             return MonStaking.Config({
                 endpoint: vm.envAddress("ETHEREUM_ENDPOINT"),

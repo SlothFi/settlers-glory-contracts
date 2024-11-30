@@ -1151,4 +1151,65 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
     function isChainPremium(uint256 _bitmap, uint32 _chainId) public pure returns(bool){
         return (_bitmap & _getBitmask(_getChainIndex(_chainId))) != 0;
     }
+
+    function calculateTokenPoints(
+        uint256 _tokenAmount,
+        uint256 _lastTimestamp,
+        uint256 _currentTimestamp,
+        bool _isPremium
+    ) public view returns (uint256) {
+        uint256 multiplier = _isPremium ? s_tokenPremiumMultiplier : s_tokenBaseMultiplier;
+        uint256 timeDiff = _currentTimestamp - _lastTimestamp;
+
+        uint256 points = _tokenAmount * multiplier * timeDiff;
+        uint256 basePoints = _enforcePointDecimals(points) / i_monsterTokenDecimals / BPS;
+
+        // if the user has not staked before
+        if (s_userStartStakeTime[msg.sender] == 0){
+            return basePoints;
+        }
+
+        // Calculate the number of weeks passed
+        uint256 weeksPassed = (_currentTimestamp - s_userStartStakeTime[msg.sender]) / SECONDS_PER_WEEK;
+
+        // Apply the 5% multiplier for each week passed
+        if (weeksPassed <= s_weekUpperBound){
+            basePoints = basePoints + (basePoints * 5 * weeksPassed / 100);
+        }
+        else{
+            basePoints = basePoints + (basePoints * 5 * s_weekUpperBound / 100);
+        }
+
+        return basePoints;
+    }
+
+    function calculateNftPoints(uint256 _nftAmount, uint256 _lastTimestamp, uint256 _currentTimestamp, bool _isPremium)
+        public
+        view
+        returns (uint256)
+    {
+        uint256 multiplier = _isPremium ? s_nftPremiumMultiplier : s_nftBaseMultiplier;
+        uint256 timeDiff = _currentTimestamp - _lastTimestamp;
+
+        uint256 points = _nftAmount * multiplier * timeDiff;
+        uint256 basePoints = _enforcePointDecimals(points) / BPS;
+
+        // if the user has not staked before
+        if (s_userStartStakeTime[msg.sender] == 0){
+            return basePoints;
+        }
+
+        // Calculate the number of weeks passed
+        uint256 weeksPassed = (_currentTimestamp - s_userStartStakeTime[msg.sender]) / SECONDS_PER_WEEK;
+
+        // Apply the 5% multiplier for each week passed
+        if (weeksPassed <= 20){
+            basePoints = basePoints + (basePoints * 5 * weeksPassed / 100);
+        }
+        else{
+            basePoints = basePoints + (basePoints * 2);
+        }
+
+        return basePoints;
+    }
 }

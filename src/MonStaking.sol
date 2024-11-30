@@ -186,6 +186,8 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
     /// @dev It stores the user's stake timestamp
     mapping (address user => uint32 timestamp) public s_userStartStakeTime;
 
+    uint256 public s_weekUpperBound;
+
     /**
     * @notice Modifier to check if the msg.sender is the LiquidStakedMonster contract
     * @dev It is used to restrict the access to the LiquidStakedMonster contract 
@@ -721,6 +723,10 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         emit MultiplePeersEnabled(_chainIds, _peers);
     }
 
+    function setWeekUpperBound(uint256 _weekUpperBound) external onlyOwner {
+        s_weekUpperBound = _weekUpperBound;
+    }
+
     /**
     * @notice It is used to be capable of receiving nfts
     * @dev It is called when safeTransferFrom is called on the NFT token
@@ -852,11 +858,11 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         uint256 weeksPassed = (_currentTimestamp - s_userStartStakeTime[msg.sender]) / SECONDS_PER_WEEK;
 
         // Apply the 5% multiplier for each week passed
-        if (weeksPassed <= 20){
+        if (weeksPassed <= s_weekUpperBound){
             basePoints = basePoints + (basePoints * 5 * weeksPassed / 100);
         }
         else{
-            basePoints = basePoints + (basePoints * 2);
+            basePoints = basePoints + (basePoints * 5 * s_weekUpperBound / 100);
         }
 
         return basePoints;
@@ -881,8 +887,13 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         uint256 points = _nftAmount * multiplier * timeDiff;
         uint256 basePoints = _enforcePointDecimals(points) / BPS;
 
+        // if the user has not staked before
+        if (s_userStartStakeTime[msg.sender] == 0){
+            return basePoints;
+        }
+
         // Calculate the number of weeks passed
-        uint256 weeksPassed = timeDiff / SECONDS_PER_WEEK;
+        uint256 weeksPassed = (_currentTimestamp - s_userStartStakeTime[msg.sender]) / SECONDS_PER_WEEK;
 
         // Apply the 5% multiplier for each week passed
         if (weeksPassed <= 20){

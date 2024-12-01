@@ -308,7 +308,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         s_userNftAmount[msg.sender] += 1;
         s_nftOwner[_tokenId] = msg.sender;
 
-        if (!s_isUserPremium[msg.sender] && block.timestamp <= i_endPremiumTimestamp){
+        if (!s_isUserPremium[msg.sender] && block.timestamp <= i_endPremiumTimestamp) {
             s_isUserPremium[msg.sender] = true;
             _updateOtherChains(msg.sender, true);
         }
@@ -412,7 +412,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
             _clearUserStakeTimeInfo(msg.sender);
         }
 
-        for(uint256 i = 0; i < tokenIdsLength; ++i){
+        for(uint256 i = 0; i < tokenIdsLength; ++i) {
 
             uint256 tokenId = _tokenIds[i];
 
@@ -456,7 +456,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         UserUnstakeRequest memory userUnstakeRequest = s_userUnstakeRequest[msg.sender];
 
         // If it is a new request we create a new one else we update the existing one
-        if(userUnstakeRequest.requestTimestamp == 0){
+        if(userUnstakeRequest.requestTimestamp == 0) {
             s_userUnstakeRequest[msg.sender] = UserUnstakeRequest(userTokenBalance, userNftBalance, block.timestamp);
         }else {
             userUnstakeRequest.tokenAmount += userTokenBalance;
@@ -643,7 +643,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         bytes memory _message,
         bytes memory _extraSendOptions,
         bool _payInLzToken
-    ) external view returns (MessagingFee memory totalFee){
+    ) external view returns (MessagingFee memory totalFee) {
         return _batchQuote(_dstEids, _message, _extraSendOptions, _payInLzToken);
     }
 
@@ -652,7 +652,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
     * @param _user - The user for which the points are calculated
     * @return The potential current points of the user
     */
-    function getPotentialCurrentPoints(address _user) external view returns (uint256){
+    function getPotentialCurrentPoints(address _user) external view returns (uint256) {
         uint256 lastTimestamp = s_userLastUpdatedTimestamp[_user];
         bool isPremium = s_isUserPremium[_user];
         uint256 tokenPoints = _calculateTokenPoints(s_userStakedTokenAmount[_user], lastTimestamp, block.timestamp, isPremium);
@@ -850,7 +850,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         uint256 basePoints = _enforcePointDecimals(points) / i_monsterTokenDecimals / BPS;
 
         // if the user has not staked before
-        if (s_userStartStakeTime[msg.sender] == 0){
+        if (s_userStartStakeTime[msg.sender] == 0) {
             return basePoints;
         }
 
@@ -858,7 +858,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         uint256 weeksPassed = (_currentTimestamp - s_userStartStakeTime[msg.sender]) / SECONDS_PER_WEEK;
 
         // Apply the 5% multiplier for each week passed
-        if (weeksPassed <= s_weekUpperBound){
+        if (weeksPassed <= s_weekUpperBound) {
             basePoints = basePoints + (basePoints * 5 * weeksPassed / 100);
         }
         else{
@@ -888,7 +888,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         uint256 basePoints = _enforcePointDecimals(points) / BPS;
 
         // if the user has not staked before
-        if (s_userStartStakeTime[msg.sender] == 0){
+        if (s_userStartStakeTime[msg.sender] == 0) {
             return basePoints;
         }
 
@@ -896,11 +896,11 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         uint256 weeksPassed = (_currentTimestamp - s_userStartStakeTime[msg.sender]) / SECONDS_PER_WEEK;
 
         // Apply the 5% multiplier for each week passed
-        if (weeksPassed <= s_weekUpperBound){
+        if (weeksPassed <= s_weekUpperBound) {
             basePoints = basePoints + (basePoints * 5 * weeksPassed / 100);
         }
         else{
-            basePoints = basePoints + (basePoints * 2);
+            basePoints = basePoints + (basePoints * 5 * s_weekUpperBound / 100);
         }
 
         return basePoints;
@@ -944,7 +944,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
 
         uint256 chainIndex = _getChainIndex(_chainId);
 
-        if (s_userChainIndexCollisions[_user][chainIndex] > 0){
+        if (s_userChainIndexCollisions[_user][chainIndex] > 0) {
             s_userChainIndexCollisions[_user][chainIndex]--;
         }else {
             s_isUserPremiumOnOtherChains[_user] &= ~(_getBitmask(chainIndex));
@@ -956,7 +956,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
     * @param _chainId - The chain id for which the index is calculated
     * @return The index of the chain in the bitmap (uint256)
     */
-    function _getChainIndex(uint32 _chainId) internal pure returns(uint256){
+    function _getChainIndex(uint32 _chainId) internal pure returns(uint256) {
         return _chainId % BITMAP_BOUND;
     }
 
@@ -966,7 +966,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
     * @return The bitmask of the chain (uint256)
     * @dev It shifts 1 to the left by the index of the chain
     */
-    function _getBitmask(uint256 _chainIndex) internal pure returns(uint256){
+    function _getBitmask(uint256 _chainIndex) internal pure returns(uint256) {
         return 1 << _chainIndex;
     }
 
@@ -978,7 +978,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
     * @dev It performs a bitwise AND operation on the bitmap and the bitmask of the chain
     * @dev It enables to check if the user is premium on the chain in o(1) time
     */
-    function _isChainPremium(uint256 _bitmap, uint32 _chainId) internal pure returns(bool){
+    function _isChainPremium(uint256 _bitmap, uint32 _chainId) internal pure returns(bool) {
         return (_bitmap & _getBitmask(_getChainIndex(_chainId))) != 0;
     }
 
@@ -1148,7 +1148,7 @@ contract MonStaking is OApp, IERC721Receiver, ReentrancyGuardTransient, IMonStak
         return _quote(_chainId, _message, _extraSendOptions, _payInLzToken);
     }
 
-    function isChainPremium(uint256 _bitmap, uint32 _chainId) public pure returns(bool){
+    function isChainPremium(uint256 _bitmap, uint32 _chainId) public pure returns(bool) {
         return (_bitmap & _getBitmask(_getChainIndex(_chainId))) != 0;
     }
 

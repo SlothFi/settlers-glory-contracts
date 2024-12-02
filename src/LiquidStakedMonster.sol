@@ -121,19 +121,6 @@ contract LiquidStakedMonster is ERC20, AccessControl {
     }
 
     /**
-    * @dev Transfer the token to the given address.
-    * @param _value The amount of token to transfer.
-    * @param _to The address to which the token is transferred.
-    * @dev Only the market place address can receive the token.
-    * @dev It payable to update the staking balance in the staking contract if premium user total balance is spent
-    */
-    function transfer(uint256 _value, address _to) public payable returns (bool) {
-        if (_to == s_marketPlace) i_stakingContract.updateStakingBalance{value: msg.value}(msg.sender, _to, _value);
-
-        return transfer(_to, _value);
-    }
-
-    /**
     * @dev Transfer the token from the given address to the given address.
     * @param _value The amount of token to transfer.
     * @param _from The address from which the token is transferred.
@@ -142,7 +129,7 @@ contract LiquidStakedMonster is ERC20, AccessControl {
     * @dev It payable to update the staking balance in the staking contract if premium user total balance is spent
     */
     function transferFrom(uint256 _value, address _from, address _to) public payable returns (bool) {
-        if (_from == s_marketPlace) i_stakingContract.updateStakingBalance{value: msg.value}(_from, _to, _value);
+        if (_to == s_marketPlace && msg.sender == s_marketPlace) i_stakingContract.updateStakingBalance{value: msg.value}(_from, _to, _value);
 
         return transferFrom(_from, _to, _value);
     }

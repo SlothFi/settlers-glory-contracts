@@ -12,3 +12,22 @@ docs/
 
 # Dotenv file
 .env
+
+node_modules/
+.vscode/
+
+coverage/
+coverage.json
+typechain/
+typechain-types/
+
+# Hardhat files
+artifacts/
+
+# LayerZero specific files
+.layerzero/
+
+# pnpm
+pnpm-error.log
+
+lib/
